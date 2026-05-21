@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mahé Richard-Schmidt — Monteur Vidéo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&family=Outfit:wght@100;200&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a09;
+      --white: #f0ede8;
+      --muted: #55554f;
+      --accent: #c8b89a;
+      --line: #1e1e1c;
+    }
+
+    html { scroll-behavior: auto; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'DM Mono', monospace;
+      cursor: none;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* ── Cursor ── */
+    #cursor {
+      position: fixed; z-index: 9999;
+      pointer-events: none;
+      mix-blend-mode: difference;
+      left: -80px; top: -80px;
+      transform: translate(-50%, -50%);
+      width: 36px; height: 36px;
+    }
+    #cursor::before, #cursor::after {
+      content: "";
+      position: absolute; top: 50%; left: 50%;
+      width: 32px; height: 2px;
+      background: rgba(255,255,255,0.95);
+      transform-origin: center;
+    }
+    #cursor::before { transform: translate(-50%, -50%) rotate(45deg); }
+    #cursor::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+
+    /* ── Header ── */
+    #hdr {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg);
+    }
+    .hdr-name {
+      font-family: 'Outfit', sans-serif; font-weight: 100;
+      font-size: .75rem; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .hdr-role {
+      font-size: .56rem; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); margin-top: 4px;
+    }
+    .hdr-contact {
+      font-size: .58rem; letter-spacing: .08em;
+      color: var(--muted); text-align: right; line-height: 2;
+    }
+    .hdr-contact a { color: inherit; text-decoration: none; transition: color .2s; cursor: none; }
+    .hdr-contact a:hover { color: var(--white); }
+
+
+    /* ── Nom flottant ── */
+    #name-wrap {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none; z-index: 5; overflow: hidden;
+    }
+    .name-ghost {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 7vw, 110px);
+      letter-spacing: .05em;
+      color: #ffffff;
+      mix-blend-mode: difference;
+      opacity: .40;
+      white-space: nowrap;
+      will-change: transform;
+      position: absolute;
+      user-select: none;
+    }
+
+    /* ── Scroll area ── */
+    #scroll-area { padding-top: 64px; }
+
+    /* ── Strip projet ── */
+    .project {
+      position: relative; width: 100%;
+      aspect-ratio: 32 / 9; overflow: hidden; cursor: none;
+      border-bottom: 1px solid var(--line);
+      transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1),
+                  filter .8s ease;
+    }
+    .project:first-child { border-top: 1px solid var(--line); }
+    .project:hover { aspect-ratio: 32 / 13; }
+
+    /* état highlight (idle) */
+    .project.highlighted .project-overlay {
+      opacity: .35 !important;
+    }
+    .project.highlighted .project-title {
+      opacity: 1 !important;
+      transform: translateY(0) !important;
+    }
+
+    .project-iframe-wrap {
+      position: absolute; inset: 0; z-index: 1; overflow: hidden;
+    }
+    .project-iframe-wrap iframe {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 100%; height: 200%;
+      transform: translate(-50%, -50%);
+      border: none; display: block;
+      pointer-events: none;
+    }
+
+    .project-overlay {
+      position: absolute; inset: 0; z-index: 2;
+      background: linear-gradient(
+        to right,
+        rgba(10,10,9,.75) 0%, rgba(10,10,9,.1) 35%,
+        rgba(10,10,9,.1) 65%, rgba(10,10,9,.5) 100%
+      );
+      transition: opacity .8s ease;
+    }
+    .project:hover .project-overlay { opacity: .7; }
+
+    .project-capture { position: absolute; inset: 0; z-index: 3; cursor: none; }
+
+    .project-num {
+      position: absolute; top: 18px; left: 48px; z-index: 4;
+      font-size: .54rem; letter-spacing: .14em; color: var(--muted);
+      opacity: 0; transition: opacity .3s ease;
+    }
+    .project:hover .project-num { opacity: 1; }
+
+    .project-cta {
+      position: absolute; top: 18px; right: 48px; z-index: 4;
+      font-size: .56rem; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--white); opacity: 0; transform: translateX(6px);
+      transition: opacity .3s ease .08s, transform .3s ease .08s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .project-cta::after { content: '→'; font-size: .9rem; }
+    .project:hover .project-cta { opacity: .7; transform: translateX(0); }
+
+    .project-info {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+      display: flex; align-items: flex-end; justify-content: space-between;
+      padding: 20px 48px;
+    }
+    .project-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(1.4rem, 3vw, 2.8rem); letter-spacing: .06em;
+      color: var(--white); line-height: 1; opacity: .8; transform: translateY(3px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .project:hover .project-title { opacity: 1; transform: translateY(0); }
+
+    .project-meta {
+      font-size: .6rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); text-align: right; line-height: 2;
+      opacity: 0; transform: translateY(5px);
+      transition: opacity .3s ease .05s, transform .3s ease .05s;
+    }
+    .project:hover .project-meta { opacity: 1; transform: translateY(0); }
+
+    /* ── Vue projet ── */
+    #project-view {
+      position: fixed; inset: 0; z-index: 500; background: var(--bg);
+      display: flex; flex-direction: column;
+      opacity: 0; pointer-events: none;
+      transition: opacity .4s cubic-bezier(.23,1,.32,1);
+    }
+    #project-view.open { opacity: 1; pointer-events: all; }
+
+    #pv-topbar {
+      height: 64px; flex-shrink: 0; position: relative;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; border-bottom: 1px solid var(--line);
+    }
+    #pv-back {
+      display: flex; align-items: center; gap: 12px;
+      font-size: .6rem; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--muted); background: none; border: none; cursor: none;
+      transition: color .2s; font-family: 'DM Mono', monospace;
+    }
+    #pv-back:hover { color: var(--white); }
+    #pv-back::before { content: '←'; font-size: 1rem; }
+
+    #pv-title {
+      font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: .08em;
+      position: absolute; left: 50%; transform: translateX(-50%);
+    }
+    #pv-meta {
+      font-size: .58rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); text-align: right; line-height: 2;
+    }
+
+    #pv-video { flex: 1; position: relative; }
+    #pv-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+    #pv-capture { position: absolute; inset: 0; z-index: 2; cursor: none; pointer-events: none; }
+
+    #pv-bottombar {
+      height: 52px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; border-top: 1px solid var(--line);
+    }
+    .pv-label { font-size: .56rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+    #pv-nav { display: flex; gap: 32px; }
+    .pv-nav-btn {
+      font-size: .58rem; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); background: none; border: none; cursor: none;
+      transition: color .2s; font-family: 'DM Mono', monospace;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .pv-nav-btn:hover { color: var(--white); }
+    .pv-nav-btn.prev::before { content: '←'; }
+    .pv-nav-btn.next::after  { content: '→'; }
+
+    /* ── Textes latéraux ── */
+    #lateral-wrap {
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 6; overflow: hidden;
+    }
+    .lat-text {
+      position: absolute;
+      font-family: 'DM Mono', monospace;
+      font-size: clamp(.52rem, .8vw, .75rem);
+      letter-spacing: .2em; text-transform: uppercase;
+      color: #ffffff;
+      mix-blend-mode: difference;
+      white-space: nowrap;
+      will-change: transform, opacity;
+      opacity: 0;
+    }
+    .lat-left  { left: 48px; }
+    .lat-right { right: 48px; }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+
+<header id="hdr">
+  <div>
+    <div class="hdr-name">Mahé Richard-Schmidt</div>
+    <div class="hdr-role">Monteur vidéo</div>
+  </div>
+
+  <div class="hdr-contact">
+    <a href="mailto:maherichardschmidt@gmail.com">maherichardschmidt@gmail.com</a><br>
+    <a href="tel:+33671451971">+33 6 71 45 19 71</a>
+  </div>
+</header>
+
+<div id="lateral-wrap"></div>
+<div id="name-wrap">
+  <div class="name-ghost" id="name1">MAHÉ</div>
+  <div class="name-ghost" id="name2">MAHÉ</div>
+</div>
+
+<div id="scroll-area">
+  <div id="projects-inner"></div>
+  <div id="projects-clone"></div>
+</div>
+
+<div id="project-view">
+  <div id="pv-topbar">
+    <button id="pv-back">Retour</button>
+    <div id="pv-title"></div>
+    <div id="pv-meta"></div>
+  </div>
+  <div id="pv-video">
+    <iframe id="pv-iframe" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+    <div id="pv-capture"></div>
+  </div>
+  <div id="pv-bottombar">
+    <div class="pv-label">Mahé Richard-Schmidt — Monteur Vidéo</div>
+    <div id="pv-nav"></div>
+  </div>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  TES PROJETS — modifie uniquement ce tableau
+//  start / end : secondes (0:05 = 5, 1:22 = 82)
+// ═══════════════════════════════════════════════════════════════
+const projects = [
+  { id:"pouf",               title:"POUF",                     genre:"Fiction",   real:"Mahé RICHARD-SCHMIDT", year:"2025", youtubeId:"XYP9Ufletss",  start:5, end:10 },
+  { id:"neoma",              title:"Neoma",                    genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"I80fSVbp-eE",  start:5, end:10 },
+  { id:"garage-lmr",         title:"Garage LMR",               genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"muCyrhqdBwA",  start:5, end:10 },
+  { id:"renee-costes",       title:"Renée Costes",             genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"XqMseG4eQ9o",  start:5, end:10 },
+  { id:"albert-koski",       title:"Albert Koski",             genre:"Pub",       real:"Nicolas ROMIEU",        year:"2022", youtubeId:"XTDjJ9pvYJI",  start:5, end:10 },
+  { id:"crash-mali",         title:"Crash au Mali",            genre:"Reportage", real:"",                      year:"2023", youtubeId:"VEVohpQye-I",  start:5, end:10 },
+  { id:"luke-anger",         title:"Luke Anger — Continuum",   genre:"Clip",      real:"Nicolas ROMIEU",        year:"2023", youtubeId:"nUmqWk7Q4no",  start:5, end:10 },
+  { id:"chine-ping-pong",    title:"La Chine et le Ping-Pong", genre:"Reportage", real:"",                      year:"2024", youtubeId:"TVLk2qBD0DM",  start:5, end:10 },
+  { id:"centaines-de-roses", title:"Murphy × Frank Takuma",    genre:"Clip",      real:"Léo VIEIRA",            year:"2024", youtubeId:"Nog0dxvLhQY",  start:5, end:10 },
+];
+// ═══════════════════════════════════════════════════════════════
+
+const N = projects.length;
+
+const scrollArea    = document.getElementById('scroll-area');
+const projectsInner = document.getElementById('projects-inner');
+const projectsClone = document.getElementById('projects-clone');
+const pvView        = document.getElementById('project-view');
+const pvTitle       = document.getElementById('pv-title');
+const pvMeta        = document.getElementById('pv-meta');
+const pvIframe      = document.getElementById('pv-iframe');
+const pvNav         = document.getElementById('pv-nav');
+const pvBack        = document.getElementById('pv-back');
+const name1         = document.getElementById('name1');
+const name2         = document.getElementById('name2');
+
+// ── Ouvrir projet ──
+function openProject(idx) {
+  const p = projects[idx];
+  pvTitle.textContent = p.title;
+  if (p.real) pvMeta.innerHTML = `Réal. ${p.real}<br>${p.year}`;
+  else pvMeta.textContent = p.year;
+  pvIframe.src = `https://www.youtube.com/embed/${p.youtubeId}?autoplay=1&rel=0&modestbranding=1`;
+
+  pvNav.innerHTML = '';
+  if (idx > 0) {
+    const btn = document.createElement('button');
+    btn.className = 'pv-nav-btn prev';
+    btn.textContent = projects[idx - 1].title;
+    btn.addEventListener('click', () => openProject(idx - 1));
+    pvNav.appendChild(btn);
+  }
+  if (idx < N - 1) {
+    const btn = document.createElement('button');
+    btn.className = 'pv-nav-btn next';
+    btn.textContent = projects[idx + 1].title;
+    btn.addEventListener('click', () => openProject(idx + 1));
+    pvNav.appendChild(btn);
+  }
+
+  pvView.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  resetIdle();
+}
+
+// ── Fermer projet ──
+function closeProject() {
+  pvView.classList.remove('open');
+  pvIframe.src = '';
+  document.body.style.overflow = '';
+}
+
+pvBack.addEventListener('click', closeProject);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProject(); });
+
+// ── Cursor ──
+const cursor = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top  = e.clientY + 'px';
+});
+
+// ── Nom flottant — scroll inversé + boucle infinie ──
+// Vitesse : 1 = normal, 2 = double, 0.5 = moitié
+const VITESSE_NOM = 1.5;
+
+function updateName() {
+  const scrollY = window.scrollY;
+  const viewH   = window.innerHeight;
+  const cycle   = (scrollY * VITESSE_NOM) % viewH;
+  name1.style.transform = `translateY(${cycle}px)`;
+  name2.style.transform = `translateY(${cycle - viewH}px)`;
+}
+
+window.addEventListener('scroll', updateName, { passive: true });
+updateName();
+
+// ── Textes latéraux ──
+// Pour chaque projet : un texte gauche (titre) et un texte droite (genre)
+// qui scrollent en sens inverse (comme le prénom) et dont l'opacité
+// est maximale quand ils croisent leur strip vidéo.
+const lateralWrap = document.getElementById('lateral-wrap');
+const latItems = []; // { leftEl, rightEl, stripEl }
+
+function buildLateralTexts() {
+  projects.forEach((p, i) => {
+    const left = document.createElement('div');
+    left.className = 'lat-text lat-left';
+    left.textContent = p.title;
+
+    const right = document.createElement('div');
+    right.className = 'lat-text lat-right';
+    right.textContent = p.genre || '';
+
+    lateralWrap.appendChild(left);
+    lateralWrap.appendChild(right);
+
+    // Référence au strip correspondant (dans projects-inner)
+    latItems.push({ leftEl: left, rightEl: right, projectIdx: i });
+  });
+}
+
+function updateLateralTexts() {
+  const viewH   = window.innerHeight;
+  const scrollY = window.scrollY;
+  const innerH  = projectsInner.offsetHeight;
+  const stripH  = innerH / N;
+  const VITESSE = 1.5; // même vitesse que le prénom
+
+  latItems.forEach(({ leftEl, rightEl, projectIdx }) => {
+    // Centre du strip dans la page (px absolus)
+    const stripCenter = 64 + projectIdx * stripH + stripH / 2;
+
+    // Position du strip dans le viewport (0 = haut, viewH = bas)
+    const stripInView = stripCenter - scrollY;
+
+    // Distance du strip au centre de l'écran
+    const distFromMid = stripInView - viewH / 2;
+
+    // Le texte se déplace en SENS INVERSE : quand le strip monte, le texte descend
+    // Position Y du texte = centre de l'écran + inverse de la distance × vitesse
+    const textY = viewH / 2 - distFromMid * VITESSE;
+
+    leftEl.style.transform  = `translateY(${textY - 10}px)`;
+    rightEl.style.transform = `translateY(${textY - 10}px)`;
+
+    // Opacité : pic au centre (distFromMid = 0), fondu sur ±40% de l'écran
+    const fadeRange = viewH * 0.40;
+    const opacity   = Math.max(0, 1 - Math.abs(distFromMid) / fadeRange);
+
+    leftEl.style.opacity  = opacity * 0.9;
+    rightEl.style.opacity = opacity * 0.9;
+  });
+}
+
+// Init après buildStrips
+function initLateral() {
+  buildLateralTexts();
+  window.addEventListener('scroll', updateLateralTexts, { passive: true });
+  updateLateralTexts();
+}
+
+</script>
+</body>
+</html>
