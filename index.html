@@ -70,7 +70,6 @@
     .project:first-child { border-top: 1px solid var(--line); }
     .project:hover { aspect-ratio: 32 / 13; }
     .project.highlighted .project-overlay { opacity: .35 !important; }
-    .project.highlighted .project-title { opacity: 1 !important; transform: translateY(0) !important; }
     .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
     .project-iframe-wrap iframe {
       position: absolute; top: 50%; left: 50%;
@@ -99,22 +98,6 @@
     }
     .project-cta::after { content: '→'; font-size: .9rem; }
     .project:hover .project-cta { opacity: .7; transform: translateX(0); }
-    .project-info {
-      position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
-      display: flex; align-items: flex-end; justify-content: space-between; padding: 20px 48px;
-    }
-    .project-title {
-      font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.4rem, 3vw, 2.8rem);
-      letter-spacing: .06em; color: var(--white); line-height: 1;
-      opacity: .8; transform: translateY(3px); transition: opacity .6s ease, transform .6s ease;
-    }
-    .project:hover .project-title { opacity: 1; transform: translateY(0); }
-    .project-meta {
-      font-size: .6rem; letter-spacing: .12em; text-transform: uppercase;
-      color: var(--accent); text-align: right; line-height: 2;
-      opacity: 0; transform: translateY(5px); transition: opacity .3s ease .05s, transform .3s ease .05s;
-    }
-    .project:hover .project-meta { opacity: 1; transform: translateY(0); }
     #project-view {
       position: fixed; inset: 0; z-index: 500; background: var(--bg);
       display: flex; flex-direction: column; opacity: 0; pointer-events: none;
@@ -272,20 +255,6 @@ function buildStrips() {
     cta.className = 'project-cta';
     cta.textContent = 'Voir le projet';
 
-    const info = document.createElement('div');
-    info.className = 'project-info';
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'project-title';
-    titleEl.textContent = p.title;
-
-    const meta = document.createElement('div');
-    meta.className = 'project-meta';
-    if (p.real) meta.innerHTML = `Réal. ${p.real}<br>${p.year}`;
-    else meta.textContent = p.year;
-
-    info.appendChild(titleEl);
-    info.appendChild(meta);
     strip.appendChild(iframeWrap);
     strip.appendChild(overlay);
     strip.appendChild(capture);
@@ -391,7 +360,7 @@ document.addEventListener('mousemove', e => {
 
 // ── Nom flottant ──
 // VITESSE_NOM : 1 = normal, 2 = double, 0.5 = moitié
-const VITESSE_NOM = 1.5;
+const VITESSE_NOM = 1.8;
 
 function updateName() {
   const scrollY = window.scrollY;
@@ -428,21 +397,60 @@ function updateLateralTexts() {
   const scrollY = window.scrollY;
   const innerH  = projectsInner.offsetHeight;
   const stripH  = innerH / N;
-  const VITESSE = 1.5;
+  const VITESSE = 1.0;
 
   latItems.forEach(({ leftEl, rightEl, projectIdx }) => {
+    // Centre du strip dans la page
     const stripCenter = 64 + projectIdx * stripH + stripH / 2;
+    // Position du strip dans le viewport
     const stripInView = stripCenter - scrollY;
     const distFromMid = stripInView - viewH / 2;
-    const textY       = viewH / 2 - distFromMid * VITESSE;
+    // Position Y du texte (sens inverse)
+    const textY = viewH / 2 - distFromMid * VITESSE;
 
     leftEl.style.transform  = `translateY(${textY - 10}px)`;
     rightEl.style.transform = `translateY(${textY - 10}px)`;
 
-    const fadeRange = viewH * 0.40;
-    const opacity   = Math.max(0, 1 - Math.abs(distFromMid) / fadeRange);
-    leftEl.style.opacity  = opacity * 0.9;
-    rightEl.style.opacity = opacity * 0.9;
+    // Bords du strip dans le viewport
+    const stripTop    = stripInView - stripH / 2;
+    const stripBottom = stripInView + stripH / 2;
+
+    // Position du texte dans le viewport (le texte est centré verticalement sur textY)
+    // On approxime la hauteur du texte à 20px
+    const textTop    = textY - 10 - 10; // textY - offset(10) - demi-hauteur-texte(10)
+    const textBottom = textY - 10 + 10;
+
+    // Masque : le texte n'est visible que si son centre est dans les bords du strip
+    // On utilise clip-path inset en coordonnées relatives au texte lui-même
+    // Plus simple : visibility + on calcule si le centre du texte est dans le strip
+
+    const textCenter = textY - 10;
+    const isOnStrip  = textCenter >= stripTop && textCenter <= stripBottom;
+
+    // Clip-path propre : on découpe le texte pour ne montrer que la partie
+    // qui se superpose au strip. Coordonnées relatives à l'élément.
+    // L'élément est positionné par transform, donc on travaille en viewport.
+
+    // Hauteur du texte (fixe ~16px)
+    const TH = 18;
+    const textAbsTop = textY - 10 - TH / 2;
+
+    // Intersection entre [textAbsTop, textAbsTop+TH] et [stripTop, stripBottom]
+    const clipTop    = Math.max(0, stripTop - textAbsTop);
+    const clipBottom = Math.max(0, textAbsTop + TH - stripBottom);
+
+    // Si aucune intersection : tout caché
+    if (clipTop >= TH || clipBottom >= TH || stripBottom < 0 || stripTop > viewH) {
+      leftEl.style.clipPath  = 'inset(100% 0 0 0)';
+      rightEl.style.clipPath = 'inset(100% 0 0 0)';
+    } else {
+      leftEl.style.clipPath  = `inset(${clipTop}px 0 ${clipBottom}px 0)`;
+      rightEl.style.clipPath = `inset(${clipTop}px 0 ${clipBottom}px 0)`;
+    }
+
+    // Opacité toujours à 1 (c'est le clip qui gère la visibilité)
+    leftEl.style.opacity  = 1;
+    rightEl.style.opacity = 1;
   });
 }
 
