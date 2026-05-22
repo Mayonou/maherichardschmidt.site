@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Mahé Richard-Schmidt — Monteur Vidéo</title>
+  <link rel="preconnect" href="https://www.youtube.com"/>
+  <link rel="preconnect" href="https://i.ytimg.com"/>
+  <link rel="dns-prefetch" href="https://www.youtube.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&family=Outfit:wght@100;200&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -364,11 +367,14 @@ function buildStrips() {
     capture.addEventListener('click', () => openProject(i));
     projectsInner.appendChild(strip);
 
-    const player = new YT.Player(`yt-${i}`, {
+    // Décale le chargement des vidéos hors-écran pour ne pas surcharger
+    const initDelay = i < 3 ? 0 : i * 300;
+    setTimeout(() => { new YT.Player(`yt-${i}`, {
       videoId: p.youtubeId,
       playerVars: {
         autoplay: 1, mute: 1, controls: 0, modestbranding: 1,
         rel: 0, disablekb: 1, loop: 0, start: p.start, end: p.end, playsinline: 1,
+        iv_load_policy: 3, fs: 0,
       },
       events: {
         onReady(e) {
@@ -382,14 +388,21 @@ function buildStrips() {
           `;
         },
         onStateChange(e) {
+          // Redémarre si la vidéo se termine ou se met en pause
           if (e.data === YT.PlayerState.ENDED || e.data === 0) {
             e.target.seekTo(p.start, true);
             e.target.playVideo();
           }
+          // Si la vidéo se met en pause (ex: YouTube l'arrête automatiquement)
+          // on la relance immédiatement — évite aussi l'affichage du bouton pause
+          if (e.data === YT.PlayerState.PAUSED) {
+            setTimeout(() => e.target.playVideo(), 50);
+          }
         },
       },
     });
-    ytPlayers.push(player);
+      ytPlayers.push(player);
+    }); }, initDelay);
   });
 }
 
@@ -534,26 +547,26 @@ let firstTourDone = false;
 let lastTs = null;
 
 function animateLight(ts) {
+  // Stop dès que le premier tour est terminé
+  if (firstTourDone) return;
+
   if (!lastTs) lastTs = ts;
-  const dt = (ts - lastTs) / 1000; // secondes écoulées depuis la dernière frame
+  const dt = (ts - lastTs) / 1000;
   lastTs = ts;
 
-  // Vitesse : rapide jusqu'à la fin du premier tour, lent ensuite
-  const speed = firstTourDone ? SPEED_SLOW : SPEED_FAST;
+  lightOffset += SPEED_FAST * dt;
 
-  lightOffset += speed * dt;
-
-  // Détection fin du premier tour
-  if (!firstTourDone && lightOffset >= PERIM) {
-    firstTourDone = true;
-  }
-
-  // Boucle : on reste dans [0, PERIM]
   if (lightOffset >= PERIM) {
-    lightOffset -= PERIM;
+    // Premier tour terminé — on fixe à la fin et on arrête
+    lightOffset = PERIM;
+    firstTourDone = true;
+    // Cache la lumière proprement
+    document.querySelectorAll('.name-svg-light').forEach(el => {
+      el.style.opacity = '0';
+    });
+    return;
   }
 
-  // Applique le dashoffset à tous les éléments lumière
   document.querySelectorAll('.name-svg-light').forEach(el => {
     el.style.strokeDashoffset = -lightOffset;
   });
@@ -596,7 +609,7 @@ function launchAutoScroll() {
     smoothScrollTo(window.scrollY + stripH * 2, 1400);
   };
   doScroll();
-  idleAutoScroll = setInterval(doScroll, 10000);
+  idleAutoScroll = setInterval(doScroll, 30000);
 }
 
 function smoothScrollTo(targetY, duration) {
