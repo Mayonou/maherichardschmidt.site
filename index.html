@@ -545,7 +545,7 @@ function animateLight(ts) {
       const textEl = lightEls[0];
       const textLen = textEl.getComputedTextLength ? textEl.getComputedTextLength() : 600;
       // Périmètre ≈ longueur du texte × ~2.2 (haut + bas des lettres + montants)
-      PERIM = textLen * 2.2;
+      PERIM = textLen * 2.3;
       // Met à jour le dasharray pour que la lumière fasse exactement 1 tour
       lightEls.forEach(el => {
         el.style.strokeDasharray = `55 ${PERIM}`;
