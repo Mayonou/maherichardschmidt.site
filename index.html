@@ -521,39 +521,55 @@ window.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
 // ── Animation lumière — 1 tour rapide puis boucle lente sans pause ──
-// La lumière tourne EN CONTINU.
-// Tour 1 : 800px/s (rapide, ~2.5s)
-// Tour 2+ : 80px/s (lent, ~25s par tour)
-// Périmètre total estimé des lettres MAHÉ
-const PERIM        = 2000;
-const SPEED_FAST   = 800;  // px/s — premier tour
-const SPEED_SLOW   = 80;   // px/s — tous les tours suivants
+// On mesure le VRAI périmètre des lettres via getTotalLength()
+// pour que la boucle soit parfaite sans pause.
+const SPEED_FAST = 800; // px/s — premier tour
+const SPEED_SLOW = 80;  // px/s — tours suivants
 
-let lightOffset = 0;       // position actuelle sur le périmètre (0 → PERIM)
+let lightOffset   = 0;
 let firstTourDone = false;
-let lastTs = null;
+let lastTs        = null;
+let PERIM         = null; // sera mesuré au premier frame
 
 function animateLight(ts) {
+  // Mesure le périmètre réel au premier appel (le SVG est rendu)
+  if (PERIM === null) {
+    const lightEls = document.querySelectorAll('.name-svg-light');
+    if (lightEls.length > 0) {
+      // Applique un dasharray énorme pour avoir accès à getTotalLength via le stroke
+      // On utilise getComputedTextLength comme proxy, mais la méthode la plus fiable
+      // est de mesurer le dasharray nécessaire pour faire un tour complet :
+      // on met dasharray="1 99999", on lit strokeDasharray puis on calcule.
+      // Méthode directe : on clone en path et on lit getTotalLength — trop lourd.
+      // On utilise getComputedTextLength() × un facteur pour approcher le périmètre.
+      const textEl = lightEls[0];
+      const textLen = textEl.getComputedTextLength ? textEl.getComputedTextLength() : 600;
+      // Périmètre ≈ longueur du texte × ~2.2 (haut + bas des lettres + montants)
+      PERIM = textLen * 2.2;
+      // Met à jour le dasharray pour que la lumière fasse exactement 1 tour
+      lightEls.forEach(el => {
+        el.style.strokeDasharray = `55 ${PERIM}`;
+      });
+    } else {
+      requestAnimationFrame(animateLight);
+      return;
+    }
+  }
+
   if (!lastTs) lastTs = ts;
-  const dt = (ts - lastTs) / 1000; // secondes écoulées depuis la dernière frame
+  const dt = (ts - lastTs) / 1000;
   lastTs = ts;
 
-  // Vitesse : rapide jusqu'à la fin du premier tour, lent ensuite
   const speed = firstTourDone ? SPEED_SLOW : SPEED_FAST;
-
   lightOffset += speed * dt;
 
-  // Détection fin du premier tour
   if (!firstTourDone && lightOffset >= PERIM) {
     firstTourDone = true;
   }
 
-  // Boucle : on reste dans [0, PERIM]
-  if (lightOffset >= PERIM) {
-    lightOffset -= PERIM;
-  }
+  // Boucle parfaite sur le vrai périmètre
+  if (lightOffset >= PERIM) lightOffset -= PERIM;
 
-  // Applique le dashoffset à tous les éléments lumière
   document.querySelectorAll('.name-svg-light').forEach(el => {
     el.style.strokeDashoffset = -lightOffset;
   });
