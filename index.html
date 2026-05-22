@@ -17,6 +17,8 @@
       font-family: 'DM Mono', monospace; cursor: none;
       overflow-x: hidden; overflow-y: auto;
     }
+
+    /* ── Cursor ── */
     #cursor {
       position: fixed; z-index: 9999; pointer-events: none;
       mix-blend-mode: difference; left: -80px; top: -80px;
@@ -29,6 +31,8 @@
     }
     #cursor::before { transform: translate(-50%, -50%) rotate(45deg); }
     #cursor::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+
+    /* ── Header ── */
     #hdr {
       position: fixed; top: 0; left: 0; right: 0; z-index: 200;
       display: flex; align-items: center; justify-content: space-between;
@@ -43,52 +47,69 @@
     .hdr-contact { font-size: .58rem; letter-spacing: .08em; color: var(--muted); text-align: right; line-height: 2; }
     .hdr-contact a { color: inherit; text-decoration: none; transition: color .2s; cursor: none; }
     .hdr-contact a:hover { color: var(--white); }
-    #lateral-wrap { position: fixed; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
-    .lat-text {
-      position: absolute; font-family: 'DM Mono', monospace;
-      font-size: clamp(.52rem, .8vw, .75rem); letter-spacing: .2em; text-transform: uppercase;
-      color: #ffffff; mix-blend-mode: difference; white-space: nowrap;
-      will-change: transform, opacity; opacity: 0;
-    }
-    .lat-left  { left: 48px; }
-    .lat-right { right: 48px; }
+
+    /* ── Nom flottant ── */
     #name-wrap {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       pointer-events: none; z-index: 5; overflow: hidden;
     }
     .name-ghost {
       font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 7vw, 110px);
-      letter-spacing: .05em; color: #ffffff; mix-blend-mode: difference; opacity: .40;
+      letter-spacing: .05em; color: #ffffff;
+      mix-blend-mode: difference;
+      opacity: .40;
+      text-shadow:
+        -1px -1px 0 rgba(0,0,0,0.9),
+         1px -1px 0 rgba(0,0,0,0.9),
+        -1px  1px 0 rgba(0,0,0,0.9),
+         1px  1px 0 rgba(0,0,0,0.9);
       white-space: nowrap; will-change: transform; position: absolute; user-select: none;
     }
+
+    /* ── Scroll area ── */
     #scroll-area { padding-top: 64px; }
+
+    /* ── Strip projet ── */
     .project {
       position: relative; width: 100%; aspect-ratio: 32 / 9;
       overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
-      transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1), filter .8s ease;
+      transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
     .project:first-child { border-top: 1px solid var(--line); }
     .project:hover { aspect-ratio: 32 / 13; }
     .project.highlighted .project-overlay { opacity: .35 !important; }
+    .project.highlighted .project-title   { opacity: 1 !important; transform: translateY(0) !important; }
+
+    /* iframe cover */
     .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
     .project-iframe-wrap iframe {
       position: absolute; top: 50%; left: 50%;
       width: 100%; height: 200%; transform: translate(-50%, -50%);
       border: none; display: block; pointer-events: none;
     }
+
+    /* overlay gradient */
     .project-overlay {
       position: absolute; inset: 0; z-index: 2;
-      background: linear-gradient(to right, rgba(10,10,9,.75) 0%, rgba(10,10,9,.1) 35%, rgba(10,10,9,.1) 65%, rgba(10,10,9,.5) 100%);
-      transition: opacity .8s ease;
+      background: linear-gradient(to right,
+        rgba(10,10,9,.75) 0%, rgba(10,10,9,.1) 35%,
+        rgba(10,10,9,.1) 65%, rgba(10,10,9,.5) 100%);
+      transition: opacity .6s ease;
     }
     .project:hover .project-overlay { opacity: .7; }
+
+    /* capture layer */
     .project-capture { position: absolute; inset: 0; z-index: 3; cursor: none; }
+
+    /* numéro */
     .project-num {
       position: absolute; top: 18px; left: 48px; z-index: 4;
       font-size: .54rem; letter-spacing: .14em; color: var(--muted);
       opacity: 0; transition: opacity .3s ease;
     }
     .project:hover .project-num { opacity: 1; }
+
+    /* CTA */
     .project-cta {
       position: absolute; top: 18px; right: 48px; z-index: 4;
       font-size: .56rem; letter-spacing: .18em; text-transform: uppercase;
@@ -98,6 +119,30 @@
     }
     .project-cta::after { content: '→'; font-size: .9rem; }
     .project:hover .project-cta { opacity: .7; transform: translateX(0); }
+
+    /* ── Info projet — visible au hover uniquement ── */
+    .project-info {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+      display: flex; align-items: flex-end; justify-content: space-between;
+      padding: 20px 48px;
+    }
+    .project-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(1.4rem, 3vw, 2.8rem); letter-spacing: .06em;
+      color: var(--white); line-height: 1;
+      opacity: 0; transform: translateY(6px);
+      transition: opacity .4s ease, transform .4s ease;
+    }
+    .project:hover .project-title { opacity: 1; transform: translateY(0); }
+    .project-meta {
+      font-size: .6rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--accent); text-align: right; line-height: 2;
+      opacity: 0; transform: translateY(6px);
+      transition: opacity .4s ease .05s, transform .4s ease .05s;
+    }
+    .project:hover .project-meta { opacity: 1; transform: translateY(0); }
+
+    /* ── Vue projet plein écran ── */
     #project-view {
       position: fixed; inset: 0; z-index: 500; background: var(--bg);
       display: flex; flex-direction: column; opacity: 0; pointer-events: none;
@@ -156,7 +201,6 @@
   </div>
 </header>
 
-<div id="lateral-wrap"></div>
 <div id="name-wrap">
   <div class="name-ghost" id="name1">MAHÉ</div>
   <div class="name-ghost" id="name2">MAHÉ</div>
@@ -188,18 +232,17 @@
 // ═══════════════════════════════════════════════════════════════
 //  TES PROJETS — modifie uniquement ce tableau
 //  start / end : secondes (0:05 = 5, 1:22 = 82)
-//  genre       : texte affiché à droite (Pub, Clip, Reportage, Fiction...)
 // ═══════════════════════════════════════════════════════════════
 const projects = [
-  { id:"pouf",               title:"POUF",                     genre:"Fiction",   real:"Mahé RICHARD-SCHMIDT", year:"2025", youtubeId:"XYP9Ufletss",  start:5, end:10 },
-  { id:"neoma",              title:"Neoma",                    genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"I80fSVbp-eE",  start:5, end:10 },
-  { id:"garage-lmr",         title:"Garage LMR",               genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"muCyrhqdBwA",  start:5, end:10 },
-  { id:"renee-costes",       title:"Renée Costes",             genre:"Pub",       real:"Nicolas ROMIEU",        year:"2023", youtubeId:"XqMseG4eQ9o",  start:5, end:10 },
-  { id:"albert-koski",       title:"Albert Koski",             genre:"Pub",       real:"Nicolas ROMIEU",        year:"2022", youtubeId:"XTDjJ9pvYJI",  start:5, end:10 },
-  { id:"crash-mali",         title:"Crash au Mali",            genre:"Reportage", real:"",                      year:"2023", youtubeId:"VEVohpQye-I",  start:5, end:10 },
-  { id:"luke-anger",         title:"Luke Anger — Continuum",   genre:"Clip",      real:"Nicolas ROMIEU",        year:"2023", youtubeId:"nUmqWk7Q4no",  start:5, end:10 },
-  { id:"chine-ping-pong",    title:"La Chine et le Ping-Pong", genre:"Reportage", real:"",                      year:"2024", youtubeId:"TVLk2qBD0DM",  start:5, end:10 },
-  { id:"centaines-de-roses", title:"Murphy × Frank Takuma",    genre:"Clip",      real:"Léo VIEIRA",            year:"2024", youtubeId:"Nog0dxvLhQY",  start:5, end:10 },
+  { id:"pouf",               title:"POUF",                     real:"Mahé RICHARD-SCHMIDT", year:"2025", youtubeId:"XYP9Ufletss",  start:5, end:10 },
+  { id:"neoma",              title:"Neoma",                    real:"Nicolas ROMIEU",        year:"2023", youtubeId:"I80fSVbp-eE",  start:5, end:10 },
+  { id:"garage-lmr",         title:"Garage LMR",               real:"Nicolas ROMIEU",        year:"2023", youtubeId:"muCyrhqdBwA",  start:5, end:10 },
+  { id:"renee-costes",       title:"Renée Costes",             real:"Nicolas ROMIEU",        year:"2023", youtubeId:"XqMseG4eQ9o",  start:5, end:10 },
+  { id:"albert-koski",       title:"Albert Koski",             real:"Nicolas ROMIEU",        year:"2022", youtubeId:"XTDjJ9pvYJI",  start:5, end:10 },
+  { id:"crash-mali",         title:"Crash au Mali",            real:"",                      year:"2023", youtubeId:"VEVohpQye-I",  start:5, end:10 },
+  { id:"luke-anger",         title:"Luke Anger — Continuum",   real:"Nicolas ROMIEU",        year:"2023", youtubeId:"nUmqWk7Q4no",  start:5, end:10 },
+  { id:"chine-ping-pong",    title:"La Chine et le Ping-Pong", real:"",                      year:"2024", youtubeId:"TVLk2qBD0DM",  start:5, end:10 },
+  { id:"centaines-de-roses", title:"Murphy × Frank Takuma",    real:"Léo VIEIRA",            year:"2024", youtubeId:"Nog0dxvLhQY",  start:5, end:10 },
 ];
 // ═══════════════════════════════════════════════════════════════
 
@@ -214,17 +257,13 @@ const pvNav         = document.getElementById('pv-nav');
 const pvBack        = document.getElementById('pv-back');
 const name1         = document.getElementById('name1');
 const name2         = document.getElementById('name2');
-const lateralWrap   = document.getElementById('lateral-wrap');
 const cursor        = document.getElementById('cursor');
+const ytPlayers     = [];
 
-const ytPlayers = [];
-const latItems  = [];
-
-// ── Point d'entrée : YouTube API prête ──
+// ── Point d'entrée YouTube API ──
 window.onYouTubeIframeAPIReady = function() {
   buildStrips();
   setupInfiniteScroll();
-  initLateral();
   startIdleEffects();
 };
 
@@ -255,11 +294,28 @@ function buildStrips() {
     cta.className = 'project-cta';
     cta.textContent = 'Voir le projet';
 
+    const info = document.createElement('div');
+    info.className = 'project-info';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'project-title';
+    titleEl.textContent = p.title;
+
+    const meta = document.createElement('div');
+    meta.className = 'project-meta';
+    if (p.real) meta.innerHTML = `Réal. ${p.real}<br>${p.year}`;
+    else meta.textContent = p.year;
+
+    info.appendChild(titleEl);
+    info.appendChild(meta);
+
     strip.appendChild(iframeWrap);
     strip.appendChild(overlay);
     strip.appendChild(capture);
     strip.appendChild(num);
     strip.appendChild(cta);
+    strip.appendChild(info);
+
     capture.addEventListener('click', () => openProject(i));
     projectsInner.appendChild(strip);
 
@@ -304,7 +360,7 @@ function setupInfiniteScroll() {
   });
 
   window.addEventListener('scroll', () => {
-    const innerH   = projectsInner.offsetHeight;
+    const innerH    = projectsInner.offsetHeight;
     const scrollTop = window.scrollY - 64;
     if (scrollTop >= innerH) {
       window.scrollTo({ top: (scrollTop % innerH) + 64, behavior: 'instant' });
@@ -347,7 +403,6 @@ function closeProject() {
   pvIframe.src = '';
   document.body.style.overflow = '';
 }
-
 pvBack.addEventListener('click', closeProject);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProject(); });
 
@@ -357,10 +412,9 @@ document.addEventListener('mousemove', e => {
   cursor.style.top  = e.clientY + 'px';
 });
 
-// ── Nom flottant ──
+// ── Nom flottant — scroll inversé + boucle infinie ──
 // VITESSE_NOM : 1 = normal, 2 = double, 0.5 = moitié
 const VITESSE_NOM = 1.8;
-
 function updateName() {
   const scrollY = window.scrollY;
   const viewH   = window.innerHeight;
@@ -370,88 +424,6 @@ function updateName() {
 }
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
-
-// ── Textes latéraux ──
-function initLateral() {
-  projects.forEach((p, i) => {
-    const left  = document.createElement('div');
-    left.className  = 'lat-text lat-left';
-    left.textContent = p.title;
-
-    const right = document.createElement('div');
-    right.className  = 'lat-text lat-right';
-    right.textContent = p.genre || '';
-
-    lateralWrap.appendChild(left);
-    lateralWrap.appendChild(right);
-    latItems.push({ leftEl: left, rightEl: right, projectIdx: i });
-  });
-
-  window.addEventListener('scroll', updateLateralTexts, { passive: true });
-  updateLateralTexts();
-}
-
-function updateLateralTexts() {
-  const viewH   = window.innerHeight;
-  const scrollY = window.scrollY;
-  const innerH  = projectsInner.offsetHeight;
-  const stripH  = innerH / N;
-  const VITESSE = 1.0;
-
-  latItems.forEach(({ leftEl, rightEl, projectIdx }) => {
-    // Centre du strip dans la page
-    const stripCenter = 64 + projectIdx * stripH + stripH / 2;
-    // Position du strip dans le viewport
-    const stripInView = stripCenter - scrollY;
-    const distFromMid = stripInView - viewH / 2;
-    // Position Y du texte (sens inverse)
-    const textY = viewH / 2 - distFromMid * VITESSE;
-
-    leftEl.style.transform  = `translateY(${textY - 10}px)`;
-    rightEl.style.transform = `translateY(${textY - 10}px)`;
-
-    // Bords du strip dans le viewport
-    const stripTop    = stripInView - stripH / 2;
-    const stripBottom = stripInView + stripH / 2;
-
-    // Position du texte dans le viewport (le texte est centré verticalement sur textY)
-    // On approxime la hauteur du texte à 20px
-    const textTop    = textY - 10 - 10; // textY - offset(10) - demi-hauteur-texte(10)
-    const textBottom = textY - 10 + 10;
-
-    // Masque : le texte n'est visible que si son centre est dans les bords du strip
-    // On utilise clip-path inset en coordonnées relatives au texte lui-même
-    // Plus simple : visibility + on calcule si le centre du texte est dans le strip
-
-    const textCenter = textY - 10;
-    const isOnStrip  = textCenter >= stripTop && textCenter <= stripBottom;
-
-    // Clip-path propre : on découpe le texte pour ne montrer que la partie
-    // qui se superpose au strip. Coordonnées relatives à l'élément.
-    // L'élément est positionné par transform, donc on travaille en viewport.
-
-    // Hauteur du texte (fixe ~16px)
-    const TH = 18;
-    const textAbsTop = textY - 10 - TH / 2;
-
-    // Intersection entre [textAbsTop, textAbsTop+TH] et [stripTop, stripBottom]
-    const clipTop    = Math.max(0, stripTop - textAbsTop);
-    const clipBottom = Math.max(0, textAbsTop + TH - stripBottom);
-
-    // Si aucune intersection : tout caché
-    if (clipTop >= TH || clipBottom >= TH || stripBottom < 0 || stripTop > viewH) {
-      leftEl.style.clipPath  = 'inset(100% 0 0 0)';
-      rightEl.style.clipPath = 'inset(100% 0 0 0)';
-    } else {
-      leftEl.style.clipPath  = `inset(${clipTop}px 0 ${clipBottom}px 0)`;
-      rightEl.style.clipPath = `inset(${clipTop}px 0 ${clipBottom}px 0)`;
-    }
-
-    // Opacité toujours à 1 (c'est le clip qui gère la visibilité)
-    leftEl.style.opacity  = 1;
-    rightEl.style.opacity = 1;
-  });
-}
 
 // ══════════════════════════════════════════════
 // ── EFFETS IDLE ──
@@ -467,7 +439,6 @@ function resetIdle() {
   if (idleHighlight)  { clearTimeout(idleHighlight);   idleHighlight  = null; }
   document.querySelectorAll('.project.highlighted').forEach(s => s.classList.remove('highlighted'));
 }
-
 document.addEventListener('mousemove',  resetIdle, { passive: true });
 document.addEventListener('scroll',     resetIdle, { passive: true });
 document.addEventListener('click',      resetIdle, { passive: true });
