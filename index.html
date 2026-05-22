@@ -48,22 +48,57 @@
     .hdr-contact a { color: inherit; text-decoration: none; transition: color .2s; cursor: none; }
     .hdr-contact a:hover { color: var(--white); }
 
-    /* ── Nom flottant ── */
+    /* ── Nom flottant SVG ── */
     #name-wrap {
-      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      position: fixed; inset: 0;
       pointer-events: none; z-index: 5; overflow: hidden;
     }
-    .name-ghost {
-      font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 7vw, 110px);
-      letter-spacing: .05em; color: #ffffff;
+    #name-svg {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
       mix-blend-mode: difference;
-      opacity: .40;
-      text-shadow:
-        -1px -1px 0 rgba(0,0,0,0.9),
-         1px -1px 0 rgba(0,0,0,0.9),
-        -1px  1px 0 rgba(0,0,0,0.9),
-         1px  1px 0 rgba(0,0,0,0.9);
-      white-space: nowrap; will-change: transform; position: absolute; user-select: none;
+      overflow: visible;
+    }
+    /* Texte de base : rempli semi-transparent */
+    .name-svg-base {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 7vw, 110px);
+      letter-spacing: .05em;
+      fill: #ffffff;
+      opacity: .38;
+      will-change: transform;
+    }
+    /* Contour blanc permanent, très fin */
+    .name-svg-stroke {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 7vw, 110px);
+      letter-spacing: .05em;
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 0.8px;
+      opacity: .55;
+      will-change: transform;
+    }
+    /* Lumière qui court : même stroke mais avec dasharray animé */
+    .name-svg-light {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 7vw, 110px);
+      letter-spacing: .05em;
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 2.5px;
+      stroke-linecap: round;
+      /* dasharray = longueur de la lumière (petite) / espace (grand) */
+      stroke-dasharray: 60 99999;
+      stroke-dashoffset: 0;
+      opacity: .95;
+      will-change: transform, stroke-dashoffset;
+      /* Animation : la lumière parcourt tout le périmètre en 4s */
+      animation: lightTrace 4s linear infinite;
+    }
+    @keyframes lightTrace {
+      from { stroke-dashoffset: 0; }
+      to   { stroke-dashoffset: -2000; }
     }
 
     /* ── Scroll area ── */
@@ -71,7 +106,7 @@
 
     /* ── Strip projet ── */
     .project {
-      position: relative; width: 100%; aspect-ratio: 32 / 9;
+      position: relative; width: 100%; aspect-ratio: 32 / 6;
       overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
@@ -214,8 +249,21 @@
 </header>
 
 <div id="name-wrap">
-  <div class="name-ghost" id="name1">MAHÉ</div>
-  <div class="name-ghost" id="name2">MAHÉ</div>
+  <svg id="name-svg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <!-- Filtre de lueur pour la lumière qui court -->
+      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <!-- Texte de base : rempli, flou, mode difference -->
+    <text id="name-base" class="name-svg-base" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
+    <!-- Texte contour blanc : stroke animé -->
+    <text id="name-stroke" class="name-svg-stroke" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
+    <!-- Lumière qui court sur le contour -->
+    <text id="name-light" class="name-svg-light" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%" filter="url(#glow)">MAHÉ</text>
+  </svg>
 </div>
 
 <div id="scroll-area">
@@ -267,8 +315,7 @@ const pvMeta        = document.getElementById('pv-meta');
 const pvIframe      = document.getElementById('pv-iframe');
 const pvNav         = document.getElementById('pv-nav');
 const pvBack        = document.getElementById('pv-back');
-const name1         = document.getElementById('name1');
-const name2         = document.getElementById('name2');
+// name1/name2 remplacés par SVG groups (voir initNameSVG)
 const cursor        = document.getElementById('cursor');
 const ytPlayers     = [];
 
@@ -427,13 +474,78 @@ document.addEventListener('mousemove', e => {
 // ── Nom flottant — scroll inversé + boucle infinie ──
 // VITESSE_NOM : 1 = normal, 2 = double, 0.5 = moitié
 const VITESSE_NOM = 1.8;
+const nameBase   = document.getElementById('name-base');
+const nameStroke = document.getElementById('name-stroke');
+const nameLight  = document.getElementById('name-light');
+const nameSvg    = document.getElementById('name-svg');
+
 function updateName() {
   const scrollY = window.scrollY;
   const viewH   = window.innerHeight;
   const cycle   = (scrollY * VITESSE_NOM) % viewH;
-  name1.style.transform = `translateY(${cycle}px)`;
-  name2.style.transform = `translateY(${cycle - viewH}px)`;
+  // Déplace les 3 éléments texte ensemble
+  const t1 = `translateY(${cycle}px)`;
+  const t2 = `translateY(${cycle - viewH}px)`;
+  // On utilise deux groupes SVG : un pour chaque clone (boucle infinie)
+  if (nameSvg._g1) {
+    nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
+    nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
+  }
 }
+
+// Crée deux groupes SVG pour la boucle infinie (comme les deux divs d'avant)
+function initNameSVG() {
+  const svgNS = 'http://www.w3.org/2000/svg';
+
+  // Supprime les éléments texte directs (remplacés par des groupes)
+  ['name-base','name-stroke','name-light'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  });
+
+  function makeGroup(filterId) {
+    const g = document.createElementNS(svgNS, 'g');
+
+    const base = document.createElementNS(svgNS, 'text');
+    base.setAttribute('dominant-baseline', 'middle');
+    base.setAttribute('text-anchor', 'middle');
+    base.setAttribute('x', '50%');
+    base.setAttribute('y', '50%');
+    base.setAttribute('class', 'name-svg-base');
+    base.textContent = 'MAHÉ';
+
+    const stroke = document.createElementNS(svgNS, 'text');
+    stroke.setAttribute('dominant-baseline', 'middle');
+    stroke.setAttribute('text-anchor', 'middle');
+    stroke.setAttribute('x', '50%');
+    stroke.setAttribute('y', '50%');
+    stroke.setAttribute('class', 'name-svg-stroke');
+    stroke.textContent = 'MAHÉ';
+
+    const light = document.createElementNS(svgNS, 'text');
+    light.setAttribute('dominant-baseline', 'middle');
+    light.setAttribute('text-anchor', 'middle');
+    light.setAttribute('x', '50%');
+    light.setAttribute('y', '50%');
+    light.setAttribute('class', 'name-svg-light');
+    if (filterId) light.setAttribute('filter', 'url(#glow)');
+    light.textContent = 'MAHÉ';
+
+    g.appendChild(base);
+    g.appendChild(stroke);
+    g.appendChild(light);
+    return g;
+  }
+
+  const g1 = makeGroup(true);
+  const g2 = makeGroup(false);
+  nameSvg.appendChild(g1);
+  nameSvg.appendChild(g2);
+  nameSvg._g1 = g1;
+  nameSvg._g2 = g2;
+}
+
+initNameSVG();
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
