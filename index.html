@@ -68,18 +68,18 @@
       opacity: .38;
       will-change: transform;
     }
-    /* Contour blanc permanent, très fin */
+    /* Contour noir permanent, très fin */
     .name-svg-stroke {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
       letter-spacing: .05em;
       fill: none;
-      stroke: #ffffff;
-      stroke-width: 0.8px;
-      opacity: .55;
+      stroke: #000000;
+      stroke-width: 1px;
+      opacity: .7;
       will-change: transform;
     }
-    /* Lumière qui court : même stroke mais avec dasharray animé */
+    /* Lumière blanche qui court — animée en JS pour vitesse variable */
     .name-svg-light {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
@@ -88,17 +88,10 @@
       stroke: #ffffff;
       stroke-width: 2.5px;
       stroke-linecap: round;
-      /* dasharray = longueur de la lumière (petite) / espace (grand) */
-      stroke-dasharray: 60 99999;
+      stroke-dasharray: 55 99999;
       stroke-dashoffset: 0;
       opacity: .95;
       will-change: transform, stroke-dashoffset;
-      /* Animation : la lumière parcourt tout le périmètre en 4s */
-      animation: lightTrace 4s linear infinite;
-    }
-    @keyframes lightTrace {
-      from { stroke-dashoffset: 0; }
-      to   { stroke-dashoffset: -2000; }
     }
 
     /* ── Scroll area ── */
@@ -106,7 +99,7 @@
 
     /* ── Strip projet ── */
     .project {
-      position: relative; width: 100%; aspect-ratio: 32 / 6;
+      position: relative; width: 100%; aspect-ratio: 32 / 6.5;
       overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
@@ -119,7 +112,11 @@
     .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
     .project-iframe-wrap iframe {
       position: absolute; top: 50%; left: 50%;
-      width: 100%; height: 200%; transform: translate(-50%, -50%);
+      /* width:100% = touche les bords gauche/droit sans pillarbox
+         height: assez grand pour couvrir le conteneur plus cropé (32/6.5) */
+      width: 100%;
+      height: 280%;
+      transform: translate(-50%, -50%);
       border: none; display: block; pointer-events: none;
     }
 
@@ -390,7 +387,7 @@ function buildStrips() {
           const iframe = iframeWrap.querySelector('iframe');
           if (iframe) iframe.style.cssText = `
             position:absolute; top:50%; left:50%;
-            width:100%; height:200%;
+            width:100%; height:280%;
             transform:translate(-50%,-50%);
             border:none; pointer-events:none;
           `;
@@ -548,6 +545,44 @@ function initNameSVG() {
 initNameSVG();
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
+
+// ── Animation lumière — vitesse décroissante puis boucle lente ──
+// Périmètre approximatif des lettres MAHÉ en px (estimé à la font-size courante)
+const LIGHT_PERIMETER = 2000;
+const LIGHT_SPEED_START = 800;  // px/s au départ (rapide)
+const LIGHT_SPEED_END   = 160;  // px/s en régime lent (cible)
+const DECEL_DURATION    = 3000; // ms pour passer de rapide à lent
+
+let lightOffset  = 0;
+let lightSpeed   = LIGHT_SPEED_START;
+let lightStartT  = null;
+
+function animateLight(ts) {
+  if (!lightStartT) lightStartT = ts;
+  const elapsed = ts - lightStartT;
+
+  // Décélération progressive sur DECEL_DURATION ms
+  if (elapsed < DECEL_DURATION) {
+    const t = elapsed / DECEL_DURATION; // 0 → 1
+    // ease out : vitesse décroît de START vers END
+    lightSpeed = LIGHT_SPEED_START + (LIGHT_SPEED_END - LIGHT_SPEED_START) * t;
+  } else {
+    lightSpeed = LIGHT_SPEED_END;
+  }
+
+  // Avance l'offset (en px/frame)
+  const dt = 1 / 60; // ~16ms
+  lightOffset += lightSpeed * dt;
+  if (lightOffset > LIGHT_PERIMETER) lightOffset -= LIGHT_PERIMETER;
+
+  // Applique à tous les éléments .name-svg-light dans le SVG
+  document.querySelectorAll('.name-svg-light').forEach(el => {
+    el.style.strokeDashoffset = -lightOffset;
+  });
+
+  requestAnimationFrame(animateLight);
+}
+requestAnimationFrame(animateLight);
 
 // ══════════════════════════════════════════════
 // ── EFFETS IDLE ──
