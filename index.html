@@ -369,40 +369,38 @@ function buildStrips() {
 
     // Décale le chargement des vidéos hors-écran pour ne pas surcharger
     const initDelay = i < 3 ? 0 : i * 300;
-    setTimeout(() => { new YT.Player(`yt-${i}`, {
-      videoId: p.youtubeId,
-      playerVars: {
-        autoplay: 1, mute: 1, controls: 0, modestbranding: 1,
-        rel: 0, disablekb: 1, loop: 0, start: p.start, end: p.end, playsinline: 1,
-        iv_load_policy: 3, fs: 0,
-      },
-      events: {
-        onReady(e) {
-          e.target.playVideo();
-          const iframe = iframeWrap.querySelector('iframe');
-          if (iframe) iframe.style.cssText = `
-            position:absolute; top:50%; left:50%;
-            width:100%; height:200%;
-            transform:translate(-50%,-50%);
-            border:none; pointer-events:none;
-          `;
+    setTimeout(() => {
+      const player = new YT.Player(`yt-${i}`, {
+        videoId: p.youtubeId,
+        playerVars: {
+          autoplay: 1, mute: 1, controls: 0, modestbranding: 1,
+          rel: 0, disablekb: 1, loop: 0, start: p.start, end: p.end, playsinline: 1,
+          iv_load_policy: 3, fs: 0,
         },
-        onStateChange(e) {
-          // Redémarre si la vidéo se termine ou se met en pause
-          if (e.data === YT.PlayerState.ENDED || e.data === 0) {
-            e.target.seekTo(p.start, true);
+        events: {
+          onReady(e) {
             e.target.playVideo();
-          }
-          // Si la vidéo se met en pause (ex: YouTube l'arrête automatiquement)
-          // on la relance immédiatement — évite aussi l'affichage du bouton pause
-          if (e.data === YT.PlayerState.PAUSED) {
-            setTimeout(() => e.target.playVideo(), 50);
-          }
+            const iframe = iframeWrap.querySelector('iframe');
+            if (iframe) iframe.style.cssText = `
+              position:absolute; top:50%; left:50%;
+              width:100%; height:200%;
+              transform:translate(-50%,-50%);
+              border:none; pointer-events:none;
+            `;
+          },
+          onStateChange(e) {
+            if (e.data === YT.PlayerState.ENDED || e.data === 0) {
+              e.target.seekTo(p.start, true);
+              e.target.playVideo();
+            }
+            if (e.data === YT.PlayerState.PAUSED) {
+              setTimeout(() => e.target.playVideo(), 50);
+            }
+          },
         },
-      },
-    });
+      });
       ytPlayers.push(player);
-    }); }, initDelay);
+    }, initDelay);
   });
 }
 
