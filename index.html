@@ -520,35 +520,72 @@ function updateName() {
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
-// ── Animation lumière — vitesse constante 80px/s, boucle parfaite ──
-// On utilise performance.now() directement (pas de delta entre frames)
-// pour garantir une vitesse vraiment constante sans accélération.
-const SPEED = 80;        // px/s — modifie cette valeur pour changer la vitesse
-const LIGHT_LEN = 25;    // px  — longueur de la lumière visible
+// ── Animation lumière — basée sur le pourcentage de tour ──
+// Chaque lettre a son propre périmètre.
+// Un pourcentage global (0→1) avance dans le temps.
+// Chaque lettre calcule son offset = pourcentage × son_périmètre.
+// Résultat : toutes les lettres bouclent en même temps, parfaitement sync.
 
-let PERIM = null;
+const TOUR_DURATION = 8; // secondes pour faire un tour complet — ajuste ici
+const LIGHT_RATIO   = 0.04; // longueur de la lumière = 4% du périmètre de chaque lettre
+
 const LIGHT_START = performance.now();
 
-function animateLight(ts) {
-  // Mesure le périmètre réel une seule fois quand le SVG est rendu
-  if (PERIM === null) {
-    const lightEls = document.querySelectorAll('.name-svg-light');
-    if (!lightEls.length) { requestAnimationFrame(animateLight); return; }
-    const textLen = lightEls[0].getComputedTextLength
-      ? lightEls[0].getComputedTextLength()
+// Données par lettre : { el, perim }
+// Remplies au premier frame quand le SVG est rendu
+let letterData = null;
+
+function initLetterData() {
+  // On cherche les éléments .name-svg-light dans le premier groupe seulement
+  // (le groupe 2 est un clone pour la boucle de scroll, on le sync manuellement)
+  const groups = nameSvg.querySelectorAll('g');
+  if (!groups.length) return false;
+
+  letterData = [];
+
+  groups.forEach(g => {
+    const lightEl = g.querySelector('.name-svg-light');
+    if (!lightEl) return;
+
+    // getComputedTextLength donne la largeur du texte entier.
+    // Pour le périmètre de chaque lettre individuellement, on va
+    // travailler sur le texte complet (MAHÉ = 4 lettres) en une seule entité —
+    // c'est plus fiable que de décomposer lettre par lettre en SVG.
+    const totalLen = lightEl.getComputedTextLength
+      ? lightEl.getComputedTextLength()
       : 600;
-    PERIM = textLen * 2.4;
-    lightEls.forEach(el => {
-      el.style.strokeDasharray = `${LIGHT_LEN} ${PERIM}`;
-    });
+
+    // Périmètre = longueur × facteur (haut + bas + montants des lettres)
+    // On utilise 1.8 comme facteur conservateur
+    const perim = totalLen * 1.8;
+    const lightLen = perim * LIGHT_RATIO;
+
+    // Initialise le dasharray avec les bonnes valeurs
+    lightEl.style.strokeDasharray = `${lightLen} ${perim}`;
+    lightEl.style.strokeDashoffset = '0';
+
+    letterData.push({ el: lightEl, perim });
+  });
+
+  return letterData.length > 0;
+}
+
+function animateLight(ts) {
+  // Init au premier frame une fois le SVG rendu
+  if (!letterData) {
+    if (!initLetterData()) {
+      requestAnimationFrame(animateLight);
+      return;
+    }
   }
 
-  // Position basée sur le temps absolu — vitesse parfaitement constante
-  const elapsed = (ts - LIGHT_START) / 1000; // secondes
-  const offset  = (elapsed * SPEED) % PERIM;
+  // Pourcentage global : 0 → 1 → 0 → 1 ... en boucle
+  const elapsed = (ts - LIGHT_START) / 1000;
+  const progress = (elapsed / TOUR_DURATION) % 1; // toujours entre 0 et 1
 
-  document.querySelectorAll('.name-svg-light').forEach(el => {
-    el.style.strokeDashoffset = -offset;
+  // Chaque lettre applique ce pourcentage à son propre périmètre
+  letterData.forEach(({ el, perim }) => {
+    el.style.strokeDashoffset = -(progress * perim);
   });
 
   requestAnimationFrame(animateLight);
