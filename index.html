@@ -59,16 +59,15 @@
       mix-blend-mode: difference;
       overflow: visible;
     }
-    /* Texte de base : rempli semi-transparent */
+    /* Remplissage semi-transparent */
     .name-svg-base {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
       letter-spacing: .05em;
       fill: #ffffff;
       opacity: .38;
-      will-change: transform;
     }
-    /* Contour noir permanent, très fin */
+    /* Contour noir permanent */
     .name-svg-stroke {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
@@ -76,10 +75,9 @@
       fill: none;
       stroke: #000000;
       stroke-width: 1px;
-      opacity: .7;
-      will-change: transform;
+      opacity: .8;
     }
-    /* Lumière blanche qui court — animée en JS pour vitesse variable */
+    /* Lumière blanche — animée en JS, sans pause */
     .name-svg-light {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
@@ -91,15 +89,16 @@
       stroke-dasharray: 55 99999;
       stroke-dashoffset: 0;
       opacity: .95;
-      will-change: transform, stroke-dashoffset;
     }
+    /* Filtre lueur */
+    #name-svg-glow { overflow: visible; }
 
     /* ── Scroll area ── */
     #scroll-area { padding-top: 64px; }
 
     /* ── Strip projet ── */
     .project {
-      position: relative; width: 100%; aspect-ratio: 32 / 6.5;
+      position: relative; width: 100%; aspect-ratio: 32 / 9;
       overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
@@ -112,11 +111,7 @@
     .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
     .project-iframe-wrap iframe {
       position: absolute; top: 50%; left: 50%;
-      /* width:100% = touche les bords gauche/droit sans pillarbox
-         height: assez grand pour couvrir le conteneur plus cropé (32/6.5) */
-      width: 100%;
-      height: 280%;
-      transform: translate(-50%, -50%);
+      width: 100%; height: 200%; transform: translate(-50%, -50%);
       border: none; display: block; pointer-events: none;
     }
 
@@ -246,20 +241,14 @@
 </header>
 
 <div id="name-wrap">
-  <svg id="name-svg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <svg id="name-svg" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <!-- Filtre de lueur pour la lumière qui court -->
       <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
         <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
     </defs>
-    <!-- Texte de base : rempli, flou, mode difference -->
-    <text id="name-base" class="name-svg-base" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
-    <!-- Texte contour blanc : stroke animé -->
-    <text id="name-stroke" class="name-svg-stroke" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
-    <!-- Lumière qui court sur le contour -->
-    <text id="name-light" class="name-svg-light" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%" filter="url(#glow)">MAHÉ</text>
+    <!-- Groupes injectés par JS pour la boucle infinie de scroll -->
   </svg>
 </div>
 
@@ -312,7 +301,7 @@ const pvMeta        = document.getElementById('pv-meta');
 const pvIframe      = document.getElementById('pv-iframe');
 const pvNav         = document.getElementById('pv-nav');
 const pvBack        = document.getElementById('pv-back');
-// name1/name2 remplacés par SVG groups (voir initNameSVG)
+// name1/name2 remplacés par groupes SVG (voir initNameSVG)
 const cursor        = document.getElementById('cursor');
 const ytPlayers     = [];
 
@@ -387,7 +376,7 @@ function buildStrips() {
           const iframe = iframeWrap.querySelector('iframe');
           if (iframe) iframe.style.cssText = `
             position:absolute; top:50%; left:50%;
-            width:100%; height:280%;
+            width:100%; height:200%;
             transform:translate(-50%,-50%);
             border:none; pointer-events:none;
           `;
@@ -471,36 +460,13 @@ document.addEventListener('mousemove', e => {
 // ── Nom flottant — scroll inversé + boucle infinie ──
 // VITESSE_NOM : 1 = normal, 2 = double, 0.5 = moitié
 const VITESSE_NOM = 1.8;
-const nameBase   = document.getElementById('name-base');
-const nameStroke = document.getElementById('name-stroke');
-const nameLight  = document.getElementById('name-light');
-const nameSvg    = document.getElementById('name-svg');
+const nameSvg = document.getElementById('name-svg');
 
-function updateName() {
-  const scrollY = window.scrollY;
-  const viewH   = window.innerHeight;
-  const cycle   = (scrollY * VITESSE_NOM) % viewH;
-  // Déplace les 3 éléments texte ensemble
-  const t1 = `translateY(${cycle}px)`;
-  const t2 = `translateY(${cycle - viewH}px)`;
-  // On utilise deux groupes SVG : un pour chaque clone (boucle infinie)
-  if (nameSvg._g1) {
-    nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
-    nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
-  }
-}
-
-// Crée deux groupes SVG pour la boucle infinie (comme les deux divs d'avant)
+// Crée les deux groupes SVG (pour la boucle infinie de scroll)
 function initNameSVG() {
   const svgNS = 'http://www.w3.org/2000/svg';
 
-  // Supprime les éléments texte directs (remplacés par des groupes)
-  ['name-base','name-stroke','name-light'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.remove();
-  });
-
-  function makeGroup(filterId) {
+  function makeGroup() {
     const g = document.createElementNS(svgNS, 'g');
 
     const base = document.createElementNS(svgNS, 'text');
@@ -525,7 +491,7 @@ function initNameSVG() {
     light.setAttribute('x', '50%');
     light.setAttribute('y', '50%');
     light.setAttribute('class', 'name-svg-light');
-    if (filterId) light.setAttribute('filter', 'url(#glow)');
+    light.setAttribute('filter', 'url(#glow)');
     light.textContent = 'MAHÉ';
 
     g.appendChild(base);
@@ -534,48 +500,60 @@ function initNameSVG() {
     return g;
   }
 
-  const g1 = makeGroup(true);
-  const g2 = makeGroup(false);
-  nameSvg.appendChild(g1);
-  nameSvg.appendChild(g2);
-  nameSvg._g1 = g1;
-  nameSvg._g2 = g2;
+  nameSvg._g1 = makeGroup();
+  nameSvg._g2 = makeGroup();
+  nameSvg.appendChild(nameSvg._g1);
+  nameSvg.appendChild(nameSvg._g2);
 }
 
 initNameSVG();
+
+function updateName() {
+  const scrollY = window.scrollY;
+  const viewH   = window.innerHeight;
+  const cycle   = (scrollY * VITESSE_NOM) % viewH;
+  if (nameSvg._g1) {
+    nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
+    nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
+  }
+}
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
-// ── Animation lumière — vitesse décroissante puis boucle lente ──
-// Périmètre approximatif des lettres MAHÉ en px (estimé à la font-size courante)
-const LIGHT_PERIMETER = 2000;
-const LIGHT_SPEED_START = 800;  // px/s au départ (rapide)
-const LIGHT_SPEED_END   = 160;  // px/s en régime lent (cible)
-const DECEL_DURATION    = 3000; // ms pour passer de rapide à lent
+// ── Animation lumière — 1 tour rapide puis boucle lente sans pause ──
+// La lumière tourne EN CONTINU.
+// Tour 1 : 800px/s (rapide, ~2.5s)
+// Tour 2+ : 80px/s (lent, ~25s par tour)
+// Périmètre total estimé des lettres MAHÉ
+const PERIM        = 2000;
+const SPEED_FAST   = 800;  // px/s — premier tour
+const SPEED_SLOW   = 80;   // px/s — tous les tours suivants
 
-let lightOffset  = 0;
-let lightSpeed   = LIGHT_SPEED_START;
-let lightStartT  = null;
+let lightOffset = 0;       // position actuelle sur le périmètre (0 → PERIM)
+let firstTourDone = false;
+let lastTs = null;
 
 function animateLight(ts) {
-  if (!lightStartT) lightStartT = ts;
-  const elapsed = ts - lightStartT;
+  if (!lastTs) lastTs = ts;
+  const dt = (ts - lastTs) / 1000; // secondes écoulées depuis la dernière frame
+  lastTs = ts;
 
-  // Décélération progressive sur DECEL_DURATION ms
-  if (elapsed < DECEL_DURATION) {
-    const t = elapsed / DECEL_DURATION; // 0 → 1
-    // ease out : vitesse décroît de START vers END
-    lightSpeed = LIGHT_SPEED_START + (LIGHT_SPEED_END - LIGHT_SPEED_START) * t;
-  } else {
-    lightSpeed = LIGHT_SPEED_END;
+  // Vitesse : rapide jusqu'à la fin du premier tour, lent ensuite
+  const speed = firstTourDone ? SPEED_SLOW : SPEED_FAST;
+
+  lightOffset += speed * dt;
+
+  // Détection fin du premier tour
+  if (!firstTourDone && lightOffset >= PERIM) {
+    firstTourDone = true;
   }
 
-  // Avance l'offset (en px/frame)
-  const dt = 1 / 60; // ~16ms
-  lightOffset += lightSpeed * dt;
-  if (lightOffset > LIGHT_PERIMETER) lightOffset -= LIGHT_PERIMETER;
+  // Boucle : on reste dans [0, PERIM]
+  if (lightOffset >= PERIM) {
+    lightOffset -= PERIM;
+  }
 
-  // Applique à tous les éléments .name-svg-light dans le SVG
+  // Applique le dashoffset à tous les éléments lumière
   document.querySelectorAll('.name-svg-light').forEach(el => {
     el.style.strokeDashoffset = -lightOffset;
   });
