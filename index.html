@@ -537,7 +537,7 @@ function animateLight(ts) {
     const textLen = lightEls[0].getComputedTextLength
       ? lightEls[0].getComputedTextLength()
       : 600;
-    PERIM = textLen * 2.0;
+    PERIM = textLen * 2.4;
     lightEls.forEach(el => {
       el.style.strokeDasharray = `${LIGHT_LEN} ${PERIM}`;
     });
