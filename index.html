@@ -129,18 +129,30 @@
     .project-title {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(1.4rem, 3vw, 2.8rem); letter-spacing: .06em;
-      color: var(--white); line-height: 1;
+      color: #ffffff; line-height: 1;
+      mix-blend-mode: difference;
+      text-shadow:
+        -1px -1px 0 rgba(0,0,0,0.9),
+         1px -1px 0 rgba(0,0,0,0.9),
+        -1px  1px 0 rgba(0,0,0,0.9),
+         1px  1px 0 rgba(0,0,0,0.9);
       opacity: 0; transform: translateY(6px);
       transition: opacity .4s ease, transform .4s ease;
     }
-    .project:hover .project-title { opacity: 1; transform: translateY(0); }
+    .project:hover .project-title { opacity: .40; transform: translateY(0); }
     .project-meta {
       font-size: .6rem; letter-spacing: .12em; text-transform: uppercase;
-      color: var(--accent); text-align: right; line-height: 2;
+      color: #ffffff; text-align: right; line-height: 2;
+      mix-blend-mode: difference;
+      text-shadow:
+        -1px -1px 0 rgba(0,0,0,0.9),
+         1px -1px 0 rgba(0,0,0,0.9),
+        -1px  1px 0 rgba(0,0,0,0.9),
+         1px  1px 0 rgba(0,0,0,0.9);
       opacity: 0; transform: translateY(6px);
       transition: opacity .4s ease .05s, transform .4s ease .05s;
     }
-    .project:hover .project-meta { opacity: 1; transform: translateY(0); }
+    .project:hover .project-meta { opacity: .40; transform: translateY(0); }
 
     /* ── Vue projet plein écran ── */
     #project-view {
