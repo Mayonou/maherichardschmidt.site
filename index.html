@@ -59,25 +59,27 @@
       mix-blend-mode: difference;
       overflow: visible;
     }
-    /* Remplissage semi-transparent */
+    /* Texte de base : rempli semi-transparent */
     .name-svg-base {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
       letter-spacing: .05em;
       fill: #ffffff;
       opacity: .38;
+      will-change: transform;
     }
-    /* Contour noir permanent */
+    /* Contour blanc permanent, très fin */
     .name-svg-stroke {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
       letter-spacing: .05em;
       fill: none;
-      stroke: #000000;
-      stroke-width: 1px;
-      opacity: .8;
+      stroke: #ffffff;
+      stroke-width: 0.8px;
+      opacity: .55;
+      will-change: transform;
     }
-    /* Lumière blanche — animée en JS, sans pause */
+    /* Lumière qui court : même stroke mais avec dasharray animé */
     .name-svg-light {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(48px, 7vw, 110px);
@@ -86,19 +88,25 @@
       stroke: #ffffff;
       stroke-width: 2.5px;
       stroke-linecap: round;
-      stroke-dasharray: 55 99999;
+      /* dasharray = longueur de la lumière (petite) / espace (grand) */
+      stroke-dasharray: 60 99999;
       stroke-dashoffset: 0;
       opacity: .95;
+      will-change: transform, stroke-dashoffset;
+      /* Animation : la lumière parcourt tout le périmètre en 4s */
+      animation: lightTrace 4s linear infinite;
     }
-    /* Filtre lueur */
-    #name-svg-glow { overflow: visible; }
+    @keyframes lightTrace {
+      from { stroke-dashoffset: 0; }
+      to   { stroke-dashoffset: -2000; }
+    }
 
     /* ── Scroll area ── */
     #scroll-area { padding-top: 64px; }
 
     /* ── Strip projet ── */
     .project {
-      position: relative; width: 100%; aspect-ratio: 32 / 9;
+      position: relative; width: 100%; aspect-ratio: 32 / 6;
       overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
@@ -241,14 +249,20 @@
 </header>
 
 <div id="name-wrap">
-  <svg id="name-svg" xmlns="http://www.w3.org/2000/svg">
+  <svg id="name-svg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs>
+      <!-- Filtre de lueur pour la lumière qui court -->
       <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feGaussianBlur stdDeviation="3" result="blur"/>
         <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
     </defs>
-    <!-- Groupes injectés par JS pour la boucle infinie de scroll -->
+    <!-- Texte de base : rempli, flou, mode difference -->
+    <text id="name-base" class="name-svg-base" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
+    <!-- Texte contour blanc : stroke animé -->
+    <text id="name-stroke" class="name-svg-stroke" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%">MAHÉ</text>
+    <!-- Lumière qui court sur le contour -->
+    <text id="name-light" class="name-svg-light" dominant-baseline="middle" text-anchor="middle" x="50%" y="50%" filter="url(#glow)">MAHÉ</text>
   </svg>
 </div>
 
@@ -301,7 +315,7 @@ const pvMeta        = document.getElementById('pv-meta');
 const pvIframe      = document.getElementById('pv-iframe');
 const pvNav         = document.getElementById('pv-nav');
 const pvBack        = document.getElementById('pv-back');
-// name1/name2 remplacés par groupes SVG (voir initNameSVG)
+// name1/name2 remplacés par SVG groups (voir initNameSVG)
 const cursor        = document.getElementById('cursor');
 const ytPlayers     = [];
 
@@ -460,13 +474,36 @@ document.addEventListener('mousemove', e => {
 // ── Nom flottant — scroll inversé + boucle infinie ──
 // VITESSE_NOM : 1 = normal, 2 = double, 0.5 = moitié
 const VITESSE_NOM = 1.8;
-const nameSvg = document.getElementById('name-svg');
+const nameBase   = document.getElementById('name-base');
+const nameStroke = document.getElementById('name-stroke');
+const nameLight  = document.getElementById('name-light');
+const nameSvg    = document.getElementById('name-svg');
 
-// Crée les deux groupes SVG (pour la boucle infinie de scroll)
+function updateName() {
+  const scrollY = window.scrollY;
+  const viewH   = window.innerHeight;
+  const cycle   = (scrollY * VITESSE_NOM) % viewH;
+  // Déplace les 3 éléments texte ensemble
+  const t1 = `translateY(${cycle}px)`;
+  const t2 = `translateY(${cycle - viewH}px)`;
+  // On utilise deux groupes SVG : un pour chaque clone (boucle infinie)
+  if (nameSvg._g1) {
+    nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
+    nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
+  }
+}
+
+// Crée deux groupes SVG pour la boucle infinie (comme les deux divs d'avant)
 function initNameSVG() {
   const svgNS = 'http://www.w3.org/2000/svg';
 
-  function makeGroup() {
+  // Supprime les éléments texte directs (remplacés par des groupes)
+  ['name-base','name-stroke','name-light'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  });
+
+  function makeGroup(filterId) {
     const g = document.createElementNS(svgNS, 'g');
 
     const base = document.createElementNS(svgNS, 'text');
@@ -491,7 +528,7 @@ function initNameSVG() {
     light.setAttribute('x', '50%');
     light.setAttribute('y', '50%');
     light.setAttribute('class', 'name-svg-light');
-    light.setAttribute('filter', 'url(#glow)');
+    if (filterId) light.setAttribute('filter', 'url(#glow)');
     light.textContent = 'MAHÉ';
 
     g.appendChild(base);
@@ -500,97 +537,17 @@ function initNameSVG() {
     return g;
   }
 
-  nameSvg._g1 = makeGroup();
-  nameSvg._g2 = makeGroup();
-  nameSvg.appendChild(nameSvg._g1);
-  nameSvg.appendChild(nameSvg._g2);
+  const g1 = makeGroup(true);
+  const g2 = makeGroup(false);
+  nameSvg.appendChild(g1);
+  nameSvg.appendChild(g2);
+  nameSvg._g1 = g1;
+  nameSvg._g2 = g2;
 }
 
 initNameSVG();
-
-function updateName() {
-  const scrollY = window.scrollY;
-  const viewH   = window.innerHeight;
-  const cycle   = (scrollY * VITESSE_NOM) % viewH;
-  if (nameSvg._g1) {
-    nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
-    nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
-  }
-}
 window.addEventListener('scroll', updateName, { passive: true });
 updateName();
-
-// ── Animation lumière — basée sur le pourcentage de tour ──
-// Chaque lettre a son propre périmètre.
-// Un pourcentage global (0→1) avance dans le temps.
-// Chaque lettre calcule son offset = pourcentage × son_périmètre.
-// Résultat : toutes les lettres bouclent en même temps, parfaitement sync.
-
-const TOUR_DURATION = 8; // secondes pour faire un tour complet — ajuste ici
-const LIGHT_RATIO   = 0.04; // longueur de la lumière = 4% du périmètre de chaque lettre
-
-const LIGHT_START = performance.now();
-
-// Données par lettre : { el, perim }
-// Remplies au premier frame quand le SVG est rendu
-let letterData = null;
-
-function initLetterData() {
-  // On cherche les éléments .name-svg-light dans le premier groupe seulement
-  // (le groupe 2 est un clone pour la boucle de scroll, on le sync manuellement)
-  const groups = nameSvg.querySelectorAll('g');
-  if (!groups.length) return false;
-
-  letterData = [];
-
-  groups.forEach(g => {
-    const lightEl = g.querySelector('.name-svg-light');
-    if (!lightEl) return;
-
-    // getComputedTextLength donne la largeur du texte entier.
-    // Pour le périmètre de chaque lettre individuellement, on va
-    // travailler sur le texte complet (MAHÉ = 4 lettres) en une seule entité —
-    // c'est plus fiable que de décomposer lettre par lettre en SVG.
-    const totalLen = lightEl.getComputedTextLength
-      ? lightEl.getComputedTextLength()
-      : 600;
-
-    // Périmètre = longueur × facteur (haut + bas + montants des lettres)
-    // On utilise 1.8 comme facteur conservateur
-    const perim = totalLen * 1.8;
-    const lightLen = perim * LIGHT_RATIO;
-
-    // Initialise le dasharray avec les bonnes valeurs
-    lightEl.style.strokeDasharray = `${lightLen} ${perim}`;
-    lightEl.style.strokeDashoffset = '0';
-
-    letterData.push({ el: lightEl, perim });
-  });
-
-  return letterData.length > 0;
-}
-
-function animateLight(ts) {
-  // Init au premier frame une fois le SVG rendu
-  if (!letterData) {
-    if (!initLetterData()) {
-      requestAnimationFrame(animateLight);
-      return;
-    }
-  }
-
-  // Pourcentage global : 0 → 1 → 0 → 1 ... en boucle
-  const elapsed = (ts - LIGHT_START) / 1000;
-  const progress = (elapsed / TOUR_DURATION) % 1; // toujours entre 0 et 1
-
-  // Chaque lettre applique ce pourcentage à son propre périmètre
-  letterData.forEach(({ el, perim }) => {
-    el.style.strokeDashoffset = -(progress * perim);
-  });
-
-  requestAnimationFrame(animateLight);
-}
-requestAnimationFrame(animateLight);
 
 // ══════════════════════════════════════════════
 // ── EFFETS IDLE ──
