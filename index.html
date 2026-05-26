@@ -307,11 +307,21 @@ const cursor        = document.getElementById('cursor');
 const ytPlayers     = [];
 
 // ── Point d'entrée YouTube API ──
-window.onYouTubeIframeAPIReady = function() {
+// Si l'API YouTube est déjà chargée (cas du refresh),
+// onYouTubeIframeAPIReady ne se déclenche pas — on le force manuellement
+function initApp() {
   buildStrips();
   setupInfiniteScroll();
+  observeVideos();
   startIdleEffects();
-};
+}
+
+window.onYouTubeIframeAPIReady = initApp;
+
+// Fallback : si YT est déjà disponible au moment où ce script s'exécute
+if (window.YT && window.YT.Player) {
+  initApp();
+}
 
 // ── Construction des strips ──
 function buildStrips() {
@@ -456,24 +466,32 @@ function setupInfiniteScroll() {
   }, { passive: true });
 }
 
-// Surveille les vidéos visibles et les force à jouer si elles sont freezées
-function watchVisibleVideos() {
-  const allVideos = document.querySelectorAll('.project-iframe-wrap video');
-  const viewTop    = window.scrollY;
-  const viewBottom = viewTop + window.innerHeight;
+// IntersectionObserver : joue les vidéos quand elles entrent dans le viewport
+// et les met en pause quand elles sortent (économise les ressources)
+function observeVideos() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const vid = entry.target;
+      if (entry.isIntersecting) {
+        vid.play().catch(() => {});
+      } else {
+        vid.pause();
+      }
+    });
+  }, { threshold: 0.1 });
 
-  allVideos.forEach(vid => {
-    const rect = vid.closest('.project').getBoundingClientRect();
-    const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+  // Observe toutes les vidéos existantes et futures (clones inclus)
+  function observeAll() {
+    document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
+      observer.observe(vid);
+    });
+  }
 
-    if (isVisible && vid.paused) {
-      vid.play().catch(() => {});
-    }
-  });
+  observeAll();
+
+  // Ré-observe après création des clones (setupInfiniteScroll les ajoute après)
+  setTimeout(observeAll, 500);
 }
-
-// Lance la surveillance toutes les 500ms
-setInterval(watchVisibleVideos, 500);
 
 // ── Ouvrir projet ──
 function openProject(idx) {
