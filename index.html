@@ -442,26 +442,48 @@ function buildStrips() {
 
 // ── Scroll infini ──
 function setupInfiniteScroll() {
-  const strips = projectsInner.querySelectorAll('.project');
-  strips.forEach(strip => {
-    const clone   = strip.cloneNode(true);
-    const capture = clone.querySelector('.project-capture');
-    const origIdx = parseInt(strip.dataset.idx);
-    capture.addEventListener('click', () => openProject(origIdx));
-    projectsClone.appendChild(clone);
+  // Stratégie : 3 copies des strips (A B C)
+  // On démarre positionné sur la copie B (milieu)
+  // Quand on approche de la fin de B → on saute discrètement sur A
+  // Quand on approche du début de B → on saute discrètement sur C
+  // L'utilisateur ne voit jamais le saut
 
-    // Les vidéos clonées doivent jouer — cloneNode ne copie pas l'état de lecture
-    const cloneVid = clone.querySelector('video');
-    if (cloneVid) {
-      cloneVid.play().catch(() => {});
-    }
+  const containers = [projectsInner, projectsClone];
+
+  // Crée une 3e copie dans un nouveau div
+  const projectsClone2 = document.createElement('div');
+  projectsClone2.id = 'projects-clone2';
+  document.getElementById('scroll-area').appendChild(projectsClone2);
+  containers.push(projectsClone2);
+
+  // Clone dans les deux conteneurs supplémentaires
+  const strips = projectsInner.querySelectorAll('.project');
+  [projectsClone, projectsClone2].forEach(container => {
+    strips.forEach(strip => {
+      const clone   = strip.cloneNode(true);
+      const capture = clone.querySelector('.project-capture');
+      const origIdx = parseInt(strip.dataset.idx);
+      capture.addEventListener('click', () => openProject(origIdx));
+      container.appendChild(clone);
+    });
   });
 
+  // Positionne le scroll au début de la copie B (=projectsClone, la deuxième)
+  const blockH = projectsInner.offsetHeight;
+  window.scrollTo({ top: blockH + 64, behavior: 'instant' });
+
+  // Surveillance du scroll : saute discrètement quand on s'approche des bords
   window.addEventListener('scroll', () => {
-    const innerH    = projectsInner.offsetHeight;
     const scrollTop = window.scrollY - 64;
-    if (scrollTop >= innerH) {
-      window.scrollTo({ top: (scrollTop % innerH) + 64, behavior: 'instant' });
+    const blockH    = projectsInner.offsetHeight;
+
+    // Si on est dans la 3e copie (C) → saute à la position équivalente dans B
+    if (scrollTop >= blockH * 2) {
+      window.scrollTo({ top: (scrollTop - blockH) + 64, behavior: 'instant' });
+    }
+    // Si on est dans la 1re copie (A) → saute à la position équivalente dans B
+    if (scrollTop < blockH) {
+      window.scrollTo({ top: (scrollTop + blockH) + 64, behavior: 'instant' });
     }
   }, { passive: true });
 }
