@@ -283,15 +283,17 @@
 //  start / end : secondes (0:05 = 5, 1:22 = 82)
 // ═══════════════════════════════════════════════════════════════
 const projects = [
-  { id:"pouf",               title:"POUF",                     real:"Mahé RICHARD-SCHMIDT", year:"2025", youtubeId:"XYP9Ufletss",  start:5, end:10 },
-  { id:"neoma",              title:"Neoma",                    real:"Nicolas ROMIEU",        year:"2023", youtubeId:"I80fSVbp-eE",  start:5, end:10 },
-  { id:"garage-lmr",         title:"Garage LMR",               real:"Nicolas ROMIEU",        year:"2023", youtubeId:"muCyrhqdBwA",  start:5, end:10 },
-  { id:"renee-costes",       title:"Renée Costes",             real:"Nicolas ROMIEU",        year:"2023", youtubeId:"XqMseG4eQ9o",  start:5, end:10 },
-  { id:"albert-koski",       title:"Albert Koski",             real:"Nicolas ROMIEU",        year:"2022", youtubeId:"XTDjJ9pvYJI",  start:5, end:10 },
-  { id:"crash-mali",         title:"Crash au Mali",            real:"",                      year:"2023", youtubeId:"VEVohpQye-I",  start:5, end:10 },
-  { id:"luke-anger",         title:"Luke Anger — Continuum",   real:"Nicolas ROMIEU",        year:"2023", youtubeId:"nUmqWk7Q4no",  start:5, end:10 },
-  { id:"chine-ping-pong",    title:"La Chine et le Ping-Pong", real:"",                      year:"2024", youtubeId:"TVLk2qBD0DM",  start:5, end:10 },
-  { id:"centaines-de-roses", title:"Murphy × Frank Takuma",    real:"Léo VIEIRA",            year:"2024", youtubeId:"Nog0dxvLhQY",  start:5, end:10 },
+  // clip : chemin vers le mp4 local pour l'extrait page d'accueil
+  //        laisser null pour utiliser YouTube à la place
+  { id:"pouf",               title:"POUF",                     real:"Mahé RICHARD-SCHMIDT", year:"2025", youtubeId:"XYP9Ufletss",  clip:"Extrait_POUUF.mp4",      start:5, end:10 },
+  { id:"neoma",              title:"Neoma",                    real:"Nicolas ROMIEU",        year:"2023", youtubeId:"I80fSVbp-eE",  clip:"Extrait_NEOMA.mp4",      start:5, end:10 },
+  { id:"garage-lmr",         title:"Garage LMR",               real:"Nicolas ROMIEU",        year:"2023", youtubeId:"muCyrhqdBwA",  clip:"Extrait_LMR.mp4",        start:5, end:10 },
+  { id:"renee-costes",       title:"Renée Costes",             real:"Nicolas ROMIEU",        year:"2023", youtubeId:"XqMseG4eQ9o",  clip:"Extrait_COSTES.mp4",     start:5, end:10 },
+  { id:"albert-koski",       title:"Albert Koski",             real:"Nicolas ROMIEU",        year:"2022", youtubeId:"XTDjJ9pvYJI",  clip:"Extrait_KOSKI.mp4",      start:5, end:10 },
+  { id:"crash-mali",         title:"Crash au Mali",            real:"",                      year:"2023", youtubeId:"VEVohpQye-I",  clip:null,                     start:5, end:10 },
+  { id:"luke-anger",         title:"Luke Anger — Continuum",   real:"Nicolas ROMIEU",        year:"2023", youtubeId:"nUmqWk7Q4no",  clip:"Extrait_CONTINUUM.mp4",  start:5, end:10 },
+  { id:"chine-ping-pong",    title:"La Chine et le Ping-Pong", real:"",                      year:"2024", youtubeId:"TVLk2qBD0DM",  clip:null,                     start:5, end:10 },
+  { id:"centaines-de-roses", title:"Murphy × Frank Takuma",    real:"Léo VIEIRA",            year:"2024", youtubeId:"Nog0dxvLhQY",  clip:"Extrait_ROSES.mp4",      start:5, end:10 },
 ];
 // ═══════════════════════════════════════════════════════════════
 
@@ -324,9 +326,29 @@ function buildStrips() {
 
     const iframeWrap = document.createElement('div');
     iframeWrap.className = 'project-iframe-wrap';
-    const placeholder = document.createElement('div');
-    placeholder.id = `yt-${i}`;
-    iframeWrap.appendChild(placeholder);
+
+    if (p.clip) {
+      // Vidéo locale mp4 — boucle native, pas de logo pause
+      const vid = document.createElement('video');
+      vid.src        = p.clip;
+      vid.autoplay   = true;
+      vid.muted      = true;
+      vid.loop       = true;
+      vid.playsInline = true;
+      vid.style.cssText = `
+        position:absolute; top:50%; left:50%;
+        width:100%; height:100%;
+        object-fit:cover;
+        transform:translate(-50%,-50%);
+        pointer-events:none;
+      `;
+      iframeWrap.appendChild(vid);
+    } else {
+      // Fallback YouTube si pas de mp4 local
+      const placeholder = document.createElement('div');
+      placeholder.id = `yt-${i}`;
+      iframeWrap.appendChild(placeholder);
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'project-overlay';
@@ -367,7 +389,8 @@ function buildStrips() {
     capture.addEventListener('click', () => openProject(i));
     projectsInner.appendChild(strip);
 
-    // Décale le chargement des vidéos hors-écran pour ne pas surcharger
+    // Player YouTube uniquement si pas de mp4 local
+    if (!p.clip) {
     const initDelay = i < 3 ? 0 : i * 300;
     setTimeout(() => {
       const player = new YT.Player(`yt-${i}`, {
@@ -407,6 +430,7 @@ function buildStrips() {
       });
       ytPlayers.push(player);
     }, initDelay);
+    } // fin if(!p.clip)
   });
 }
 
