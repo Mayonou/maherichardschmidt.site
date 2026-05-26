@@ -439,6 +439,12 @@ function setupInfiniteScroll() {
     const origIdx = parseInt(strip.dataset.idx);
     capture.addEventListener('click', () => openProject(origIdx));
     projectsClone.appendChild(clone);
+
+    // Les vidéos clonées doivent jouer — cloneNode ne copie pas l'état de lecture
+    const cloneVid = clone.querySelector('video');
+    if (cloneVid) {
+      cloneVid.play().catch(() => {});
+    }
   });
 
   window.addEventListener('scroll', () => {
@@ -449,6 +455,25 @@ function setupInfiniteScroll() {
     }
   }, { passive: true });
 }
+
+// Surveille les vidéos visibles et les force à jouer si elles sont freezées
+function watchVisibleVideos() {
+  const allVideos = document.querySelectorAll('.project-iframe-wrap video');
+  const viewTop    = window.scrollY;
+  const viewBottom = viewTop + window.innerHeight;
+
+  allVideos.forEach(vid => {
+    const rect = vid.closest('.project').getBoundingClientRect();
+    const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+
+    if (isVisible && vid.paused) {
+      vid.play().catch(() => {});
+    }
+  });
+}
+
+// Lance la surveillance toutes les 500ms
+setInterval(watchVisibleVideos, 500);
 
 // ── Ouvrir projet ──
 function openProject(idx) {
