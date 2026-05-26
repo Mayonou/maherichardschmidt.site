@@ -472,6 +472,16 @@ function setupInfiniteScroll() {
   const blockH = projectsInner.offsetHeight;
   window.scrollTo({ top: blockH + 64, behavior: 'instant' });
 
+  // Force play sur toutes les vidéos visibles après le repositionnement
+  setTimeout(() => {
+    document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
+      const rect = vid.getBoundingClientRect();
+      if (rect.bottom > 0 && rect.top < window.innerHeight) {
+        vid.play().catch(() => {});
+      }
+    });
+  }, 200);
+
   // Surveillance du scroll : saute discrètement quand on s'approche des bords
   window.addEventListener('scroll', () => {
     const scrollTop = window.scrollY - 64;
@@ -512,7 +522,7 @@ function observeVideos() {
   observeAll();
 
   // Ré-observe après création des clones (setupInfiniteScroll les ajoute après)
-  setTimeout(observeAll, 500);
+  setTimeout(observeAll, 800);
 }
 
 // ── Ouvrir projet ──
