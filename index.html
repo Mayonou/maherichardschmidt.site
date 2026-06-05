@@ -450,57 +450,37 @@ function setupInfiniteScroll() {
     capture.addEventListener('click', () => openProject(origIdx));
     projectsClone.appendChild(clone);
 
-    // Les vidéos clonées doivent jouer — cloneNode ne copie pas l'état de lecture
     const cloneVid = clone.querySelector('video');
-    if (cloneVid) {
-      cloneVid.play().catch(() => {});
-    }
+    if (cloneVid) cloneVid.play().catch(() => {});
   });
 
-  window.addEventListener('scroll', () => {
+  // Boucle rAF : surveille la position à chaque frame (60 fps) au lieu de
+  // s'appuyer sur l'événement scroll, qui est trop espacé sur mobile lors du
+  // défilement par inertie — ce qui bloque la téléportation et coince la page.
+  function loopCheck() {
     const innerH    = projectsInner.offsetHeight;
     const scrollTop = window.scrollY - 64;
     if (scrollTop >= innerH) {
       window.scrollTo({ top: (scrollTop % innerH) + 64, behavior: 'instant' });
-      // Après téléportation, le navigateur ne redéclenche pas l'IntersectionObserver
-      // On force manuellement le play sur toutes les vidéos visibles
-      requestAnimationFrame(() => {
-        document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
-          const rect = vid.getBoundingClientRect();
-          if (rect.top < window.innerHeight && rect.bottom > 0) {
-            vid.play().catch(() => {});
-          }
-        });
-      });
     }
-  }, { passive: true });
+    requestAnimationFrame(loopCheck);
+  }
+  requestAnimationFrame(loopCheck);
 }
 
-// IntersectionObserver : joue les vidéos quand elles entrent dans le viewport
-// et les met en pause quand elles sortent (économise les ressources)
+// Démarre toutes les vidéos et maintient la lecture en continu.
+// On n'utilise pas de pause hors-viewport : les MP4 locaux sont déjà bufferisés
+// et la pause asynchrone de l'IntersectionObserver causait un gel sur les clones.
 function observeVideos() {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      const vid = entry.target;
-      if (entry.isIntersecting) {
-        vid.play().catch(() => {});
-      } else {
-        vid.pause();
-      }
-    });
-  }, { threshold: 0.1 });
-
-  // Observe toutes les vidéos existantes et futures (clones inclus)
-  function observeAll() {
+  function playAll() {
     document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
-      observer.observe(vid);
+      if (vid.paused) vid.play().catch(() => {});
     });
   }
 
-  observeAll();
-
-  // Ré-observe après création des clones (setupInfiniteScroll les ajoute après)
-  setTimeout(observeAll, 500);
+  playAll();
+  // Relance après création des clones
+  setTimeout(playAll, 500);
 }
 
 // ── Ouvrir projet ──
