@@ -18,7 +18,7 @@
     body {
       background: var(--bg); color: var(--white);
       font-family: 'DM Mono', monospace; cursor: none;
-      overflow-x: hidden; overflow-y: auto;
+      overflow: hidden;
     }
 
     /* ── Cursor ── */
@@ -97,7 +97,12 @@
     #name-svg-glow { overflow: visible; }
 
     /* ── Scroll area ── */
-    #scroll-area { padding-top: 64px; }
+    #scroll-area {
+      padding-top: 64px;
+      height: 100vh;
+      overflow-y: scroll;
+      overflow-x: hidden;
+    }
 
     /* ── Strip projet ── */
     .project {
@@ -294,6 +299,7 @@ const projects = [
 // ═══════════════════════════════════════════════════════════════
 
 const N             = projects.length;
+const scrollArea    = document.getElementById('scroll-area');
 const projectsInner = document.getElementById('projects-inner');
 const projectsClone = document.getElementById('projects-clone');
 const pvView        = document.getElementById('project-view');
@@ -454,14 +460,14 @@ function setupInfiniteScroll() {
     if (cloneVid) cloneVid.play().catch(() => {});
   });
 
-  // Boucle rAF : surveille la position à chaque frame (60 fps) au lieu de
-  // s'appuyer sur l'événement scroll, qui est trop espacé sur mobile lors du
-  // défilement par inertie — ce qui bloque la téléportation et coince la page.
+  // Boucle rAF : surveille la position à chaque frame (60 fps).
+  // scrollArea.scrollTop est fiable même pendant l'inertie mobile,
+  // contrairement à window.scrollTo qui peut être ignoré en fin de page iOS.
   function loopCheck() {
     const innerH    = projectsInner.offsetHeight;
-    const scrollTop = window.scrollY - 64;
+    const scrollTop = scrollArea.scrollTop;
     if (scrollTop >= innerH) {
-      window.scrollTo({ top: (scrollTop % innerH) + 64, behavior: 'instant' });
+      scrollArea.scrollTop = scrollTop % innerH;
     }
     requestAnimationFrame(loopCheck);
   }
@@ -579,7 +585,7 @@ function initNameSVG() {
 initNameSVG();
 
 function updateName() {
-  const scrollY = window.scrollY;
+  const scrollY = scrollArea.scrollTop;
   const viewH   = window.innerHeight;
   const cycle   = (scrollY * VITESSE_NOM) % viewH;
   if (nameSvg._g1) {
@@ -587,7 +593,7 @@ function updateName() {
     nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
   }
 }
-window.addEventListener('scroll', updateName, { passive: true });
+scrollArea.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
 // ── Animation lumière — 1 tour rapide puis boucle lente sans pause ──
@@ -646,8 +652,8 @@ function resetIdle() {
   if (idleHighlight)  { clearTimeout(idleHighlight);   idleHighlight  = null; }
   document.querySelectorAll('.project.highlighted').forEach(s => s.classList.remove('highlighted'));
 }
-document.addEventListener('mousemove',  resetIdle, { passive: true });
-document.addEventListener('scroll',     resetIdle, { passive: true });
+document.addEventListener('mousemove',   resetIdle, { passive: true });
+scrollArea.addEventListener('scroll',   resetIdle, { passive: true });
 document.addEventListener('click',      resetIdle, { passive: true });
 document.addEventListener('touchstart', resetIdle, { passive: true });
 
@@ -663,21 +669,21 @@ function startIdleEffects() {
 function launchAutoScroll() {
   const doScroll = () => {
     const stripH = projectsInner.offsetHeight / N;
-    smoothScrollTo(window.scrollY + stripH * 2, 1400);
+    smoothScrollTo(scrollArea.scrollTop + stripH * 2, 1400);
   };
   // Pas de scroll immédiat — attend 25s avant le premier, puis toutes les 25s
   idleAutoScroll = setInterval(doScroll, 12000);
 }
 
 function smoothScrollTo(targetY, duration) {
-  const startY = window.scrollY;
+  const startY = scrollArea.scrollTop;
   const startT = performance.now();
   const delta  = targetY - startY;
   function step(now) {
     const elapsed  = now - startT;
     const progress = Math.min(elapsed / duration, 1);
     const ease     = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-    window.scrollTo(0, startY + delta * ease);
+    scrollArea.scrollTop = startY + delta * ease;
     if (progress < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
