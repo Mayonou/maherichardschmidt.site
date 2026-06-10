@@ -231,10 +231,27 @@
     .pv-nav-btn:hover { color: var(--white); }
     .pv-nav-btn.prev::before { content: '←'; }
     .pv-nav-btn.next::after  { content: '→'; }
+
+    /* ── Loading overlay ── */
+    #loading {
+      position: fixed; inset: 0; z-index: 9000;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .6s ease;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .loading-bar {
+      width: 120px; height: 1px; background: var(--line); overflow: hidden;
+    }
+    .loading-fill {
+      height: 100%; background: var(--accent);
+      width: 0%; transition: width .3s ease;
+    }
   </style>
 </head>
 <body>
 
+<div id="loading"><div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div></div>
 <div id="cursor"></div>
 
 <header id="hdr">
@@ -444,6 +461,32 @@ function buildStrips() {
     }, initDelay);
     } // fin if(!p.clip)
   });
+
+  // ── Loading tracker ──
+  // Attend que toutes les vidéos locales soient prêtes à jouer
+  const loadingEl   = document.getElementById('loading');
+  const loadingFill = document.getElementById('loading-fill');
+  const allVids     = Array.from(projectsInner.querySelectorAll('video'));
+  let loaded = 0;
+
+  function onVideoReady() {
+    loaded++;
+    loadingFill.style.width = (loaded / allVids.length * 100) + '%';
+    if (loaded >= allVids.length) {
+      setTimeout(() => loadingEl.classList.add('hidden'), 200);
+    }
+  }
+
+  allVids.forEach(vid => {
+    if (vid.readyState >= 3) { // HAVE_FUTURE_DATA — déjà prêt
+      onVideoReady();
+    } else {
+      vid.addEventListener('canplay', onVideoReady, { once: true });
+    }
+  });
+
+  // Sécurité : retire l'overlay après 6s même si certaines vidéos sont lentes
+  setTimeout(() => loadingEl.classList.add('hidden'), 6000);
 }
 
 // ── Scroll infini ──
@@ -460,15 +503,34 @@ function setupInfiniteScroll() {
     if (cloneVid) cloneVid.play().catch(() => {});
   });
 
-  // Boucle rAF : surveille la position à chaque frame (60 fps).
-  // scrollArea.scrollTop est fiable même pendant l'inertie mobile,
-  // contrairement à window.scrollTo qui peut être ignoré en fin de page iOS.
+  // Boucle rAF à 60 fps.
+  // Stratégie : téléporter uniquement quand le scroll est stable (inertie terminée)
+  // pour ne jamais couper l'élan sur mobile. Original et clone étant visuellement
+  // identiques, le saut est invisible. Si l'utilisateur dépasse 2×innerH
+  // (contenu épuisé), on force quand même la téléportation.
+  let prevTop      = -1;
+  let stableFrames = 0;
+  const STABLE_NEEDED = 4; // ~4 frames sans mouvement = inertie terminée
+
   function loopCheck() {
     const innerH    = projectsInner.offsetHeight;
     const scrollTop = scrollArea.scrollTop;
-    if (scrollTop >= innerH) {
-      scrollArea.scrollTop = scrollTop % innerH;
+
+    if (scrollTop === prevTop) {
+      stableFrames++;
+    } else {
+      stableFrames = 0;
     }
+    prevTop = scrollTop;
+
+    const pastEnd   = scrollTop >= innerH * 2 - 10; // sécurité : plus de contenu
+    const atRest    = stableFrames >= STABLE_NEEDED && scrollTop >= innerH;
+
+    if (pastEnd || atRest) {
+      scrollArea.scrollTop = scrollTop % innerH;
+      stableFrames = 0;
+    }
+
     requestAnimationFrame(loopCheck);
   }
   requestAnimationFrame(loopCheck);
