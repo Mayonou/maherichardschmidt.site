@@ -364,6 +364,7 @@ function buildStrips() {
       vid.muted      = true;
       vid.loop       = true;
       vid.playsInline = true;
+      vid.preload    = 'auto';
       vid.style.cssText = `
         position:absolute; top:50%; left:50%;
         width:100%; height:100%;
@@ -463,30 +464,39 @@ function buildStrips() {
   });
 
   // ── Loading tracker ──
-  // Attend que toutes les vidéos locales soient prêtes à jouer
+  // Attend que TOUTES les vidéos locales soient suffisamment bufferisées pour
+  // jouer sans coupure (canplaythrough = readyState 4 HAVE_ENOUGH_DATA).
   const loadingEl   = document.getElementById('loading');
   const loadingFill = document.getElementById('loading-fill');
   const allVids     = Array.from(projectsInner.querySelectorAll('video'));
-  let loaded = 0;
+  const readySet    = new Set();
 
-  function onVideoReady() {
-    loaded++;
-    loadingFill.style.width = (loaded / allVids.length * 100) + '%';
-    if (loaded >= allVids.length) {
-      setTimeout(() => loadingEl.classList.add('hidden'), 200);
+  function markReady(vid) {
+    if (readySet.has(vid)) return;       // évite le double comptage
+    readySet.add(vid);
+    loadingFill.style.width = (readySet.size / allVids.length * 100) + '%';
+    if (readySet.size >= allVids.length) {
+      setTimeout(() => loadingEl.classList.add('hidden'), 250);
     }
   }
 
   allVids.forEach(vid => {
-    if (vid.readyState >= 3) { // HAVE_FUTURE_DATA — déjà prêt
-      onVideoReady();
+    if (vid.readyState >= 4) {            // HAVE_ENOUGH_DATA — déjà prêt
+      markReady(vid);
     } else {
-      vid.addEventListener('canplay', onVideoReady, { once: true });
+      vid.addEventListener('canplaythrough', () => markReady(vid), { once: true });
+      // Filet de sécurité par vidéo : si canplaythrough ne se déclenche jamais
+      // (certains navigateurs sont avares), on valide dès qu'on peut jouer.
+      vid.addEventListener('canplay', () => {
+        // Laisse une chance à canplaythrough, sinon valide après un délai
+        setTimeout(() => markReady(vid), 4000);
+      }, { once: true });
+      // En cas d'erreur (404, décodage), on n'attend pas indéfiniment
+      vid.addEventListener('error', () => markReady(vid), { once: true });
+      // Force le chargement
+      vid.load();
     }
   });
-
-  // Sécurité : retire l'overlay après 6s même si certaines vidéos sont lentes
-  setTimeout(() => loadingEl.classList.add('hidden'), 6000);
 }
 
 // ── Scroll infini ──
