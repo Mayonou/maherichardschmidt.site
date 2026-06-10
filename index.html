@@ -96,12 +96,20 @@
     /* Filtre lueur */
     #name-svg-glow { overflow: visible; }
 
-    /* ── Scroll area ── */
+    /* ── Scroll area — viewport fixe, défilement virtuel par transform ── */
     #scroll-area {
       padding-top: 64px;
       height: 100vh;
-      overflow-y: scroll;
-      overflow-x: hidden;
+      height: 100dvh;
+      overflow: hidden;
+      position: relative;
+      touch-action: none;        /* on gère nous-mêmes le geste tactile */
+      overscroll-behavior: none;
+    }
+    #scroll-track {
+      will-change: transform;
+      transform: translate3d(0, 0, 0);
+      backface-visibility: hidden;
     }
 
     /* ── Strip projet ── */
@@ -278,8 +286,10 @@
 </div>
 
 <div id="scroll-area">
-  <div id="projects-inner"></div>
-  <div id="projects-clone"></div>
+  <div id="scroll-track">
+    <div id="projects-inner"></div>
+    <div id="projects-clone"></div>
+  </div>
 </div>
 
 <div id="project-view">
@@ -317,6 +327,7 @@ const projects = [
 
 const N             = projects.length;
 const scrollArea    = document.getElementById('scroll-area');
+const scrollTrack   = document.getElementById('scroll-track');
 const projectsInner = document.getElementById('projects-inner');
 const projectsClone = document.getElementById('projects-clone');
 const pvView        = document.getElementById('project-view');
@@ -464,8 +475,11 @@ function buildStrips() {
   });
 
   // ── Loading tracker ──
-  // Attend que TOUTES les vidéos locales soient suffisamment bufferisées pour
-  // jouer sans coupure (canplaythrough = readyState 4 HAVE_ENOUGH_DATA).
+  // On ne masque l'écran de chargement qu'une fois que CHAQUE vidéo a
+  // réellement peint une image à l'écran. canplaythrough garantit le buffer,
+  // mais PAS qu'une frame soit décodée et affichée — d'où des tuiles noires.
+  // requestVideoFrameCallback ne se déclenche qu'à la présentation d'une vraie
+  // image : c'est le seul signal qui garantit « la vidéo n'est pas blanche ».
   const loadingEl   = document.getElementById('loading');
   const loadingFill = document.getElementById('loading-fill');
   const allVids     = Array.from(projectsInner.querySelectorAll('video'));
@@ -480,70 +494,230 @@ function buildStrips() {
     }
   }
 
-  allVids.forEach(vid => {
-    if (vid.readyState >= 4) {            // HAVE_ENOUGH_DATA — déjà prêt
-      markReady(vid);
+  // Confirme qu'une vraie image a été affichée pour cette vidéo
+  function whenFramePainted(vid) {
+    if ('requestVideoFrameCallback' in vid) {
+      vid.requestVideoFrameCallback(() => markReady(vid));
     } else {
-      vid.addEventListener('canplaythrough', () => markReady(vid), { once: true });
-      // Filet de sécurité par vidéo : si canplaythrough ne se déclenche jamais
-      // (certains navigateurs sont avares), on valide dès qu'on peut jouer.
-      vid.addEventListener('canplay', () => {
-        // Laisse une chance à canplaythrough, sinon valide après un délai
-        setTimeout(() => markReady(vid), 4000);
-      }, { once: true });
-      // En cas d'erreur (404, décodage), on n'attend pas indéfiniment
-      vid.addEventListener('error', () => markReady(vid), { once: true });
-      // Force le chargement
-      vid.load();
+      // Navigateurs sans rVFC : on se rabat sur canplaythrough + un court délai
+      // pour laisser le temps au premier rendu.
+      const fallback = () => setTimeout(() => markReady(vid), 300);
+      if (vid.readyState >= 4) fallback();
+      else vid.addEventListener('canplaythrough', fallback, { once: true });
+    }
+  }
+
+  allVids.forEach(vid => {
+    // S'assure que la lecture démarre (nécessaire pour produire une frame)
+    const kick = () => vid.play().catch(() => {});
+    if (vid.readyState >= 2) kick();
+    else vid.addEventListener('loadeddata', kick, { once: true });
+
+    whenFramePainted(vid);
+
+    // En cas d'erreur (404, décodage), on n'attend pas indéfiniment
+    vid.addEventListener('error', () => markReady(vid), { once: true });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── DÉFILEMENT INFINI — moteur virtuel par transform ──
+// On n'utilise PAS le scroll natif : il est impossible de reboucler
+// sans à-coups sur mobile (repositionner scrollTop pendant l'inertie
+// iOS provoque saccades/blocages). À la place on déplace une piste via
+// translate3d et on enroule la position avec un modulo : aucune limite
+// de scroll, aucune couture visible, inertie 100 % maîtrisée.
+// ══════════════════════════════════════════════════════════════════
+const VS = {
+  pos: 0,            // position virtuelle (px), croissante, jamais bornée
+  vel: 0,            // vitesse (px/s) pour l'inertie
+  C: 1,              // hauteur d'un bloc de contenu (1 jeu de projets)
+  dragging: false,
+  auto: null,        // animation d'auto-scroll idle {from,to,dur,t0}
+};
+
+// Construit un bloc-copie (clone de tous les strips) prêt à jouer
+function buildCopyBlock() {
+  const block = document.createElement('div');
+  projectsInner.querySelectorAll('.project').forEach(strip => {
+    const clone   = strip.cloneNode(true);
+    const origIdx = parseInt(strip.dataset.idx);
+    clone.querySelector('.project-capture')
+         .addEventListener('click', () => openProject(origIdx));
+    primeVideo(clone.querySelector('video'));
+    block.appendChild(clone);
+  });
+  return block;
+}
+
+// Garantit qu'une vidéo joue en continu, sans contrôle ni bouton play
+function primeVideo(vid) {
+  if (!vid) return;
+  vid.muted = true; vid.loop = true; vid.autoplay = true;
+  vid.playsInline = true; vid.controls = false;
+  vid.setAttribute('webkit-playsinline', '');
+  vid.setAttribute('playsinline', '');
+  vid.disablePictureInPicture = true;
+  vid.play().catch(() => {});
+}
+
+function setupInfiniteScroll() {
+  // 1er bloc-clone : on réutilise #projects-clone existant
+  projectsInner.querySelectorAll('.project').forEach(strip => {
+    const clone   = strip.cloneNode(true);
+    const origIdx = parseInt(strip.dataset.idx);
+    clone.querySelector('.project-capture')
+         .addEventListener('click', () => openProject(origIdx));
+    primeVideo(clone.querySelector('video'));
+    projectsClone.appendChild(clone);
+  });
+
+  // Ajoute autant de blocs-copies que nécessaire pour que la piste
+  // remplisse toujours l'écran pendant l'enroulement (≥ viewport + 1 bloc).
+  function ensureCopies() {
+    VS.C = projectsInner.offsetHeight || 1;
+    const needed = Math.ceil(window.innerHeight / VS.C) + 1; // blocs au total
+    // blocs présents = projectsInner + projectsClone + extras déjà ajoutés
+    let present = 2 + scrollTrack.querySelectorAll('.copy-block').length;
+    while (present < needed) {
+      const b = buildCopyBlock();
+      b.className = 'copy-block';
+      scrollTrack.appendChild(b);
+      present++;
+    }
+  }
+  ensureCopies();
+
+  // IMPORTANT : on ne recalcule VS.C que sur un vrai redimensionnement de
+  // fenêtre. Surtout PAS au survol : l'expansion d'une tuile (aspect-ratio
+  // au hover) change la hauteur du bloc et ferait osciller le diviseur de
+  // l'enroulement → jitter à la couture sur desktop. La géométrie de boucle
+  // ne dépend donc que de la taille du viewport.
+  window.addEventListener('resize', ensureCopies, { passive: true });
+
+  startEngine();
+  bindScrollInput();
+}
+
+// ── Boucle de rendu (rAF) ──
+let _vsLast = null;
+function engineFrame(ts) {
+  if (_vsLast == null) _vsLast = ts;
+  let dt = (ts - _vsLast) / 1000;
+  _vsLast = ts;
+  if (dt > 0.05) dt = 0.05; // borne anti-saut après un onglet en arrière-plan
+
+  if (VS.auto) {
+    // Auto-scroll idle : interpolation douce vers la cible
+    const t = Math.min((ts - VS.auto.t0) / VS.auto.dur, 1);
+    const e = t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+    VS.pos = VS.auto.from + (VS.auto.to - VS.auto.from) * e;
+    if (t >= 1) VS.auto = null;
+  } else if (!VS.dragging) {
+    // Inertie : glissement avec décroissance exponentielle (≈ feel natif)
+    VS.pos += VS.vel * dt;
+    VS.vel *= Math.exp(-3.5 * dt);
+    if (Math.abs(VS.vel) < 2) VS.vel = 0;
+  }
+
+  // Enroulement invisible : modulo sur la hauteur d'un bloc
+  const off = ((VS.pos % VS.C) + VS.C) % VS.C;
+  scrollTrack.style.transform = `translate3d(0, ${-off}px, 0)`;
+
+  updateName();
+
+  // Allège le décodage : ne garde en lecture que les vidéos proches de l'écran.
+  // Throttlé (~toutes les 4 frames) car getBoundingClientRect force un reflow.
+  if ((_vidCullTick++ & 3) === 0) updateVideoActivity();
+
+  requestAnimationFrame(engineFrame);
+}
+function startEngine() { requestAnimationFrame(engineFrame); }
+
+// ── Gestion du décodage vidéo ──
+// On ne laisse jouer que les vidéos dans une bande de ±N strips autour du
+// viewport ; les autres copies sont mises en pause pour soulager le CPU/GPU.
+// Le réveil est PROACTIF (marge large) : une vidéo est relancée bien avant
+// d'entrer à l'écran, donc aucune image figée à la couture de boucle.
+let _vidCullTick = 0;
+const ACTIVE_MARGIN_STRIPS = 5; // strips gardés actifs au-delà du viewport (au repos)
+const CULL_LOOKAHEAD = 0.35;    // s d'anticipation : marge ∝ vitesse de défilement
+function updateVideoActivity() {
+  const vh     = window.innerHeight;
+  const stripH = (VS.C / N) || 200;
+  // Marge PRÉDICTIVE : on élargit la bande proportionnellement à la vitesse,
+  // pour relancer les vidéos bien avant qu'elles n'entrent à l'écran lors
+  // d'un lancer rapide (momentum) — sinon tuiles figées à la couture.
+  const margin = stripH * ACTIVE_MARGIN_STRIPS + Math.abs(VS.vel) * CULL_LOOKAHEAD;
+  document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
+    const r = vid.getBoundingClientRect();
+    const inBand = r.bottom > -margin && r.top < vh + margin;
+    if (inBand) {
+      if (vid.paused) vid.play().catch(() => {});
+    } else if (!vid.paused) {
+      vid.pause();
     }
   });
 }
 
-// ── Scroll infini ──
-function setupInfiniteScroll() {
-  const strips = projectsInner.querySelectorAll('.project');
-  strips.forEach(strip => {
-    const clone   = strip.cloneNode(true);
-    const capture = clone.querySelector('.project-capture');
-    const origIdx = parseInt(strip.dataset.idx);
-    capture.addEventListener('click', () => openProject(origIdx));
-    projectsClone.appendChild(clone);
+// ── Saisie : tactile, molette, clavier ──
+function bindScrollInput() {
+  const MAX_V = 6000; // px/s — plafond d'inertie
 
-    const cloneVid = clone.querySelector('video');
-    if (cloneVid) cloneVid.play().catch(() => {});
+  // Tactile
+  let lastY = 0, lastT = 0, vy = 0;
+  scrollArea.addEventListener('touchstart', (e) => {
+    VS.dragging = true; VS.vel = 0; VS.auto = null;
+    lastY = e.touches[0].clientY; lastT = performance.now(); vy = 0;
+    resetIdle();
+  }, { passive: true });
+
+  scrollArea.addEventListener('touchmove', (e) => {
+    const y  = e.touches[0].clientY;
+    const now = performance.now();
+    const dy = lastY - y;          // doigt vers le haut => contenu descend
+    VS.pos += dy;
+    const dt = (now - lastT) / 1000;
+    if (dt > 0) { vy = dy / dt; VS.vel = vy; } // vitesse live (pour le culling prédictif)
+    lastY = y; lastT = now;
+    if (e.cancelable) e.preventDefault(); // empêche le scroll natif
+  }, { passive: false });
+
+  const endTouch = () => {
+    VS.dragging = false;
+    VS.vel = Math.max(-MAX_V, Math.min(MAX_V, vy));
+  };
+  scrollArea.addEventListener('touchend',    endTouch, { passive: true });
+  scrollArea.addEventListener('touchcancel', endTouch, { passive: true });
+
+  // Molette / trackpad
+  // On n'applique PAS le delta directement à la position : la molette souris
+  // arrive par paliers (~100px) et ferait sauter la page ET le texte MAHÉ.
+  // On l'injecte comme impulsion de vitesse : le moteur lisse le mouvement
+  // image par image (glissement continu, comme un scroll natif animé).
+  scrollArea.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    VS.auto = null;
+    let d = e.deltaY;
+    if (e.deltaMode === 1) d *= 16;                 // lignes → px
+    else if (e.deltaMode === 2) d *= window.innerHeight; // pages → px
+    VS.vel = Math.max(-MAX_V, Math.min(MAX_V, VS.vel + d * 4));
+    resetIdle();
+  }, { passive: false });
+
+  // Clavier
+  window.addEventListener('keydown', (e) => {
+    const page = window.innerHeight * 0.9;
+    let handled = true;
+    switch (e.key) {
+      case 'ArrowDown': VS.vel = 1400; break;
+      case 'ArrowUp':   VS.vel = -1400; break;
+      case 'PageDown': case ' ': VS.pos += page; break;
+      case 'PageUp':   VS.pos -= page; break;
+      default: handled = false;
+    }
+    if (handled) { VS.auto = null; resetIdle(); if (e.key === ' ') e.preventDefault(); }
   });
-
-  // Boucle rAF à 60 fps.
-  // Stratégie : téléporter uniquement quand le scroll est stable (inertie terminée)
-  // pour ne jamais couper l'élan sur mobile. Original et clone étant visuellement
-  // identiques, le saut est invisible. Si l'utilisateur dépasse 2×innerH
-  // (contenu épuisé), on force quand même la téléportation.
-  let prevTop      = -1;
-  let stableFrames = 0;
-  const STABLE_NEEDED = 4; // ~4 frames sans mouvement = inertie terminée
-
-  function loopCheck() {
-    const innerH    = projectsInner.offsetHeight;
-    const scrollTop = scrollArea.scrollTop;
-
-    if (scrollTop === prevTop) {
-      stableFrames++;
-    } else {
-      stableFrames = 0;
-    }
-    prevTop = scrollTop;
-
-    const pastEnd   = scrollTop >= innerH * 2 - 10; // sécurité : plus de contenu
-    const atRest    = stableFrames >= STABLE_NEEDED && scrollTop >= innerH;
-
-    if (pastEnd || atRest) {
-      scrollArea.scrollTop = scrollTop % innerH;
-      stableFrames = 0;
-    }
-
-    requestAnimationFrame(loopCheck);
-  }
-  requestAnimationFrame(loopCheck);
 }
 
 // Démarre toutes les vidéos et maintient la lecture en continu.
@@ -657,15 +831,14 @@ function initNameSVG() {
 initNameSVG();
 
 function updateName() {
-  const scrollY = scrollArea.scrollTop;
+  const scrollY = (typeof VS !== 'undefined') ? VS.pos : 0;
   const viewH   = window.innerHeight;
-  const cycle   = (scrollY * VITESSE_NOM) % viewH;
+  const cycle   = ((scrollY * VITESSE_NOM) % viewH + viewH) % viewH;
   if (nameSvg._g1) {
     nameSvg._g1.setAttribute('transform', `translate(0, ${cycle})`);
     nameSvg._g2.setAttribute('transform', `translate(0, ${cycle - viewH})`);
   }
 }
-scrollArea.addEventListener('scroll', updateName, { passive: true });
 updateName();
 
 // ── Animation lumière — 1 tour rapide puis boucle lente sans pause ──
@@ -722,10 +895,10 @@ function resetIdle() {
   lastInteraction = Date.now();
   if (idleAutoScroll) { clearInterval(idleAutoScroll); idleAutoScroll = null; }
   if (idleHighlight)  { clearTimeout(idleHighlight);   idleHighlight  = null; }
+  if (typeof VS !== 'undefined') VS.auto = null; // stoppe l'auto-scroll en cours
   document.querySelectorAll('.project.highlighted').forEach(s => s.classList.remove('highlighted'));
 }
 document.addEventListener('mousemove',   resetIdle, { passive: true });
-scrollArea.addEventListener('scroll',   resetIdle, { passive: true });
 document.addEventListener('click',      resetIdle, { passive: true });
 document.addEventListener('touchstart', resetIdle, { passive: true });
 
@@ -737,28 +910,13 @@ function startIdleEffects() {
   }, 1000);
 }
 
-// Auto-scroll : descend de 2 strips toutes les 10s
+// Auto-scroll idle : descend de 2 strips toutes les 12s via le moteur virtuel
 function launchAutoScroll() {
   const doScroll = () => {
     const stripH = projectsInner.offsetHeight / N;
-    smoothScrollTo(scrollArea.scrollTop + stripH * 2, 1400);
+    VS.auto = { from: VS.pos, to: VS.pos + stripH * 2, dur: 1400, t0: performance.now() };
   };
-  // Pas de scroll immédiat — attend 25s avant le premier, puis toutes les 25s
   idleAutoScroll = setInterval(doScroll, 12000);
-}
-
-function smoothScrollTo(targetY, duration) {
-  const startY = scrollArea.scrollTop;
-  const startT = performance.now();
-  const delta  = targetY - startY;
-  function step(now) {
-    const elapsed  = now - startT;
-    const progress = Math.min(elapsed / duration, 1);
-    const ease     = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-    scrollArea.scrollTop = startY + delta * ease;
-    if (progress < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
 }
 
 // Highlight tournant : illumine un strip toutes les 2.8s
