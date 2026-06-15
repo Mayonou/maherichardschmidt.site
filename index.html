@@ -54,14 +54,16 @@
     /* ── Nom flottant SVG ── */
     #name-wrap {
       position: fixed; inset: 0;
-      pointer-events: none; z-index: 5; overflow: hidden;
+      pointer-events: none; z-index: 5; overflow: hidden; overflow: clip;
     }
     #name-svg {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       mix-blend-mode: difference;
       overflow: visible;
+      pointer-events: none;   /* l'overlay du nom ne capte jamais les événements */
     }
+    #name-svg * { pointer-events: none; }
     /* Remplissage semi-transparent */
     .name-svg-base {
       font-family: 'Bebas Neue', sans-serif;
@@ -101,9 +103,10 @@
       padding-top: 64px;
       height: 100vh;
       height: 100dvh;
-      overflow: hidden;
+      overflow: hidden;          /* repli vieux navigateurs */
+      overflow: clip;            /* découpe sans créer de conteneur défilable */
       position: relative;
-      touch-action: none;        /* on gère nous-mêmes le geste tactile */
+      touch-action: none;        /* on gère le geste tactile en JS */
       overscroll-behavior: none;
     }
     #scroll-track {
@@ -115,7 +118,11 @@
     /* ── Strip projet ── */
     .project {
       position: relative; width: 100%; aspect-ratio: 32 / 9;
-      overflow: hidden; cursor: none; border-bottom: 1px solid var(--line);
+      /* clip, pas hidden : sinon chaque tuile devient un conteneur de défilement
+         qui « avale » la molette sur Safari (scroll mort au-dessus des tuiles). */
+      overflow: hidden;          /* repli vieux navigateurs */
+      overflow: clip;
+      cursor: none; border-bottom: 1px solid var(--line);
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
     .project:first-child { border-top: 1px solid var(--line); }
@@ -127,7 +134,7 @@
     .project.highlighted .project-title   { opacity: 1 !important; transform: translateY(0) !important; }
 
     /* iframe cover */
-    .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; }
+    .project-iframe-wrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; overflow: clip; }
     .project-iframe-wrap iframe {
       position: absolute; top: 50%; left: 50%;
       width: 100%; height: 200%; transform: translate(-50%, -50%);
@@ -207,6 +214,11 @@
       transition: opacity .4s cubic-bezier(.23,1,.32,1);
     }
     #project-view.open { opacity: 1; pointer-events: all; }
+    /* Vue projet fermée : on retire l'iframe du DOM visuel. Un iframe, même avec
+       un ancêtre en pointer-events:none, « avale » les événements wheel sur
+       Safari (Chrome les laisse passer) — ce qui bloquait le défilement au-dessus
+       de la zone centrale. display:none le rend totalement transparent. */
+    #project-view:not(.open) #pv-iframe { display: none; }
     #pv-topbar {
       height: 64px; flex-shrink: 0; position: relative;
       display: flex; align-items: center; justify-content: space-between;
@@ -450,7 +462,7 @@ function buildStrips() {
     strip.appendChild(cta);
     strip.appendChild(info);
 
-    capture.addEventListener('click', () => openProject(i));
+    capture.addEventListener('click', () => clickOpen(i));
     projectsInner.appendChild(strip);
 
     // Player YouTube uniquement si pas de mp4 local ET si l'API est dispo
@@ -579,7 +591,7 @@ function buildCopyBlock() {
     const clone   = strip.cloneNode(true);
     const origIdx = parseInt(strip.dataset.idx);
     clone.querySelector('.project-capture')
-         .addEventListener('click', () => openProject(origIdx));
+         .addEventListener('click', () => clickOpen(origIdx));
     primeVideo(clone.querySelector('video'));
     block.appendChild(clone);
   });
@@ -620,7 +632,7 @@ function setupInfiniteScroll() {
     const clone   = strip.cloneNode(true);
     const origIdx = parseInt(strip.dataset.idx);
     clone.querySelector('.project-capture')
-         .addEventListener('click', () => openProject(origIdx));
+         .addEventListener('click', () => clickOpen(origIdx));
     primeVideo(clone.querySelector('video'));
     projectsClone.appendChild(clone);
   });
@@ -750,30 +762,65 @@ function bindScrollInput() {
   const MAX_V = 6000; // px/s — plafond d'inertie
 
   // Tactile
-  let lastY = 0, lastT = 0, vy = 0;
+  // On distingue un TAP d'un SCROLL : tant que le doigt n'a pas dépassé un petit
+  // seuil, on ne défile pas et on ne fait PAS de preventDefault — sinon le clic
+  // synthétique (qui ouvre le projet) est annulé. Le défilement ne démarre qu'au
+  // franchissement du seuil. C'était la cause des taps « capricieux » sur mobile.
+  const TAP_SLOP = 10; // px de tolérance avant de considérer que c'est un scroll
+  let startX = 0, startY = 0, lastY = 0, lastT = 0, vy = 0, moving = false;
+
   scrollArea.addEventListener('touchstart', (e) => {
-    VS.dragging = true; VS.vel = 0; VS.auto = null;
-    lastY = e.touches[0].clientY; lastT = performance.now(); vy = 0;
+    const t = e.touches[0];
+    startX = t.clientX; startY = lastY = t.clientY;
+    lastT = performance.now(); vy = 0; moving = false;
+    VS.vel = 0; VS.auto = null;
     resetIdle();
   }, { passive: true });
 
   scrollArea.addEventListener('touchmove', (e) => {
-    const y  = e.touches[0].clientY;
-    const now = performance.now();
-    const dy = lastY - y;          // doigt vers le haut => contenu descend
+    const t = e.touches[0];
+    const y = t.clientY, now = performance.now();
+
+    if (!moving) {
+      // Encore potentiellement un tap : on attend de dépasser le seuil
+      if (Math.hypot(t.clientX - startX, y - startY) < TAP_SLOP) return;
+      // Seuil franchi → c'est un scroll
+      moving = true; VS.dragging = true;
+      lastY = y; lastT = now;          // repart d'ici pour éviter un saut
+    }
+
+    const dy = lastY - y;              // doigt vers le haut => contenu descend
     VS.pos += dy;
     const dt = (now - lastT) / 1000;
-    if (dt > 0) { vy = dy / dt; VS.vel = vy; } // vitesse live (pour le culling prédictif)
+    if (dt > 0) { vy = dy / dt; VS.vel = vy; } // vitesse live (culling prédictif)
     lastY = y; lastT = now;
-    if (e.cancelable) e.preventDefault(); // empêche le scroll natif
+    if (e.cancelable) e.preventDefault(); // bloque le scroll natif pendant le drag
   }, { passive: false });
 
-  const endTouch = () => {
+  const endTouch = (e) => {
+    if (moving) {
+      // C'était un scroll → on lance l'inertie
+      VS.vel = Math.max(-MAX_V, Math.min(MAX_V, vy));
+    } else {
+      // C'était un TAP → on ouvre le projet sous le doigt directement.
+      // On ne se fie pas au clic synthétique (peu fiable avec le moteur de
+      // transform sur mobile) ; on le supprime pour éviter une double ouverture.
+      const t = e.changedTouches && e.changedTouches[0];
+      if (t) {
+        const el   = document.elementFromPoint(t.clientX, t.clientY);
+        const proj = el && el.closest ? el.closest('.project') : null;
+        if (proj && proj.dataset.idx != null) {
+          _lastTapOpen = Date.now();
+          if (e.cancelable) e.preventDefault();
+          openProject(parseInt(proj.dataset.idx));
+        }
+      }
+    }
     VS.dragging = false;
-    VS.vel = Math.max(-MAX_V, Math.min(MAX_V, vy));
+    moving = false;
   };
-  scrollArea.addEventListener('touchend',    endTouch, { passive: true });
-  scrollArea.addEventListener('touchcancel', endTouch, { passive: true });
+  scrollArea.addEventListener('touchend',    endTouch, { passive: false });
+  scrollArea.addEventListener('touchcancel', () => { VS.dragging = false; moving = false; }, { passive: true });
 
   // Molette / trackpad
   // Écouté sur WINDOW (pas sur #scroll-area) : Safari ne délivrait pas
@@ -822,6 +869,16 @@ function observeVideos() {
   playAll();
   // Relance après création des clones
   setTimeout(playAll, 500);
+}
+
+// ── Ouverture via clic (souris) ──
+// Sur tactile, l'ouverture est gérée directement dans touchend (clic synthétique
+// peu fiable avec le moteur de transform). Ce garde évite une double ouverture
+// si un clic synthétique survient juste après le tap tactile.
+let _lastTapOpen = 0;
+function clickOpen(idx) {
+  if (Date.now() - _lastTapOpen < 700) return; // déjà ouvert par le tap tactile
+  openProject(idx);
 }
 
 // ── Ouvrir projet ──
