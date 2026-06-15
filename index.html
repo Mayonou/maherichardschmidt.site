@@ -119,7 +119,10 @@
       transition: aspect-ratio .6s cubic-bezier(.23,1,.32,1);
     }
     .project:first-child { border-top: 1px solid var(--line); }
-    .project:hover { aspect-ratio: 32 / 13; }
+    /* L'agrandissement est piloté par .expand (synchronisé sur TOUTES les copies
+       d'un même projet) et non par :hover, afin que tous les blocs gardent une
+       hauteur identique — condition de l'enroulement sans saut. */
+    .project.expand { aspect-ratio: 32 / 13; }
     .project.highlighted .project-overlay { opacity: .35 !important; }
     .project.highlighted .project-title   { opacity: 1 !important; transform: translateY(0) !important; }
 
@@ -588,15 +591,19 @@ function setupInfiniteScroll() {
   }
   ensureCopies();
 
-  // IMPORTANT : on ne recalcule VS.C que sur un vrai redimensionnement de
-  // fenêtre. Surtout PAS au survol : l'expansion d'une tuile (aspect-ratio
-  // au hover) change la hauteur du bloc et ferait osciller le diviseur de
-  // l'enroulement → jitter à la couture sur desktop. La géométrie de boucle
-  // ne dépend donc que de la taille du viewport.
-  window.addEventListener('resize', ensureCopies, { passive: true });
+  // VS.C suit la hauteur réelle d'un bloc. C'est sûr car l'agrandissement au
+  // survol est synchronisé sur toutes les copies (classe .expand) : les blocs
+  // restent toujours de hauteur identique, donc l'enroulement modulo reste
+  // exact à chaque instant, même pendant la transition d'agrandissement.
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(ensureCopies).observe(projectsInner);
+  } else {
+    window.addEventListener('resize', ensureCopies, { passive: true });
+  }
 
   startEngine();
   bindScrollInput();
+  bindHoverSync();
 }
 
 // ── Boucle de rendu (rAF) ──
@@ -633,6 +640,30 @@ function engineFrame(ts) {
   requestAnimationFrame(engineFrame);
 }
 function startEngine() { requestAnimationFrame(engineFrame); }
+
+// ── Synchronisation de l'agrandissement au survol (desktop uniquement) ──
+// Quand la souris survole une tuile, on agrandit la MÊME tuile dans toutes les
+// copies pour que les blocs restent de hauteur égale (boucle sans saut).
+// Les effets d'overlay/titre restent pilotés par :hover sur la seule tuile visée.
+function bindHoverSync() {
+  let curIdx = null;
+  const setExpand = (idx, on) => {
+    document.querySelectorAll(`.project[data-idx="${idx}"]`)
+            .forEach(el => el.classList.toggle('expand', on));
+  };
+  scrollArea.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return; // pas d'agrandissement au tactile
+    const proj = e.target.closest ? e.target.closest('.project') : null;
+    const idx  = proj ? proj.dataset.idx : null;
+    if (idx === curIdx) return;
+    if (curIdx !== null) setExpand(curIdx, false);
+    curIdx = idx;
+    if (idx !== null) setExpand(idx, true);
+  });
+  scrollArea.addEventListener('pointerleave', () => {
+    if (curIdx !== null) { setExpand(curIdx, false); curIdx = null; }
+  });
+}
 
 // ── Gestion du décodage vidéo ──
 // On ne laisse jouer que les vidéos dans une bande de ±N strips autour du
