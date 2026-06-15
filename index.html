@@ -251,8 +251,13 @@
       transition: opacity .6s ease;
     }
     #loading.hidden { opacity: 0; pointer-events: none; }
+    /* Pendant le chargement, on fait passer le nom MAHÉ au-dessus de l'overlay
+       (et de sa barre) ; il retrouve son z-index normal une fois chargé. */
+    body.loading #name-wrap { z-index: 9001; }
     .loading-bar {
       width: 120px; height: 1px; background: var(--line); overflow: hidden;
+      /* descend la barre sous le nom MAHÉ (centré verticalement) */
+      transform: translateY(90px);
     }
     .loading-fill {
       height: 100%; background: var(--accent);
@@ -260,7 +265,7 @@
     }
   </style>
 </head>
-<body>
+<body class="loading">
 
 <div id="loading"><div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div></div>
 <div id="cursor"></div>
@@ -343,22 +348,31 @@ const pvBack        = document.getElementById('pv-back');
 const cursor        = document.getElementById('cursor');
 const ytPlayers     = [];
 
-// ── Point d'entrée YouTube API ──
-// Si l'API YouTube est déjà chargée (cas du refresh),
-// onYouTubeIframeAPIReady ne se déclenche pas — on le force manuellement
+// ── Point d'entrée ──
+// IMPORTANT : l'app ne dépend PAS de l'API YouTube. Toutes les tuiles sont des
+// MP4 locaux ; lier l'init au chargement de youtube.com/iframe_api cassait tout
+// quand ce script est bloqué/lent (Safari ITP, bloqueurs de contenu) → page
+// figée, aucun défilement. On initialise donc dès que le DOM est prêt.
+let _appStarted = false;
 function initApp() {
+  if (_appStarted) return;   // garde contre une double initialisation
+  _appStarted = true;
   buildStrips();
   setupInfiniteScroll();
   observeVideos();
   startIdleEffects();
 }
 
-window.onYouTubeIframeAPIReady = initApp;
-
-// Fallback : si YT est déjà disponible au moment où ce script s'exécute
-if (window.YT && window.YT.Player) {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
   initApp();
 }
+
+// L'API YouTube reste optionnelle (seulement utile pour d'éventuels projets
+// sans clip local). Si elle se charge, elle ne fait que ré-appeler initApp,
+// qui est neutralisé par le garde ci-dessus.
+window.onYouTubeIframeAPIReady = initApp;
 
 // ── Construction des strips ──
 function buildStrips() {
@@ -379,6 +393,12 @@ function buildStrips() {
       vid.loop       = true;
       vid.playsInline = true;
       vid.preload    = 'auto';
+      // Safari n'autorise l'autoplay que si « muted » est un ATTRIBUT (pas
+      // seulement la propriété JS) ; idem pour la lecture inline.
+      vid.setAttribute('muted', '');
+      vid.setAttribute('playsinline', '');
+      vid.setAttribute('webkit-playsinline', '');
+      trackPaint(vid);
       vid.style.cssText = `
         position:absolute; top:50%; left:50%;
         width:100%; height:100%;
@@ -433,10 +453,11 @@ function buildStrips() {
     capture.addEventListener('click', () => openProject(i));
     projectsInner.appendChild(strip);
 
-    // Player YouTube uniquement si pas de mp4 local
+    // Player YouTube uniquement si pas de mp4 local ET si l'API est dispo
     if (!p.clip) {
     const initDelay = i < 3 ? 0 : i * 300;
     setTimeout(() => {
+      if (!(window.YT && window.YT.Player)) return; // API absente : on n'essaie pas
       const player = new YT.Player(`yt-${i}`, {
         videoId: p.youtubeId,
         playerVars: {
@@ -488,12 +509,18 @@ function buildStrips() {
   const allVids     = Array.from(projectsInner.querySelectorAll('video'));
   const readySet    = new Set();
 
+  // Masque l'overlay ET redescend le nom MAHÉ à son z-index normal
+  const hideLoading = () => {
+    loadingEl.classList.add('hidden');
+    document.body.classList.remove('loading');
+  };
+
   function markReady(vid) {
     if (readySet.has(vid)) return;       // évite le double comptage
     readySet.add(vid);
     loadingFill.style.width = (readySet.size / allVids.length * 100) + '%';
     if (readySet.size >= allVids.length) {
-      setTimeout(() => loadingEl.classList.add('hidden'), 250);
+      setTimeout(hideLoading, 250);
     }
   }
 
@@ -521,6 +548,12 @@ function buildStrips() {
     // En cas d'erreur (404, décodage), on n'attend pas indéfiniment
     vid.addEventListener('error', () => markReady(vid), { once: true });
   });
+
+  // FILET DE SÉCURITÉ GLOBAL : quoi qu'il arrive, on retire l'overlay après 7 s.
+  // Indispensable : si une vidéo ne signale jamais sa première image (ex.
+  // autoplay bloqué sur Safari), l'overlay resterait affiché et bloquerait
+  // tout défilement, donnant l'impression que le scroll ne marche pas.
+  setTimeout(hideLoading, 7000);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -558,10 +591,27 @@ function primeVideo(vid) {
   if (!vid) return;
   vid.muted = true; vid.loop = true; vid.autoplay = true;
   vid.playsInline = true; vid.controls = false;
+  vid.setAttribute('muted', '');            // attribut requis par Safari (autoplay)
   vid.setAttribute('webkit-playsinline', '');
   vid.setAttribute('playsinline', '');
   vid.disablePictureInPicture = true;
+  trackPaint(vid);
   vid.play().catch(() => {});
+}
+
+// Mémorise quelles vidéos ont déjà affiché au moins une image.
+// On ne mettra JAMAIS en pause une vidéo non encore peinte : sinon elle
+// montrerait la couleur de fond (tuile « vide ») au lieu d'une image figée.
+const _painted = new WeakSet();
+function trackPaint(vid) {
+  if (!vid) return;
+  if ('requestVideoFrameCallback' in vid) {
+    vid.requestVideoFrameCallback(() => _painted.add(vid));
+  } else if (vid.readyState >= 2) {
+    _painted.add(vid);
+  } else {
+    vid.addEventListener('loadeddata', () => _painted.add(vid), { once: true });
+  }
 }
 
 function setupInfiniteScroll() {
@@ -676,16 +726,20 @@ const CULL_LOOKAHEAD = 0.35;    // s d'anticipation : marge ∝ vitesse de défi
 function updateVideoActivity() {
   const vh     = window.innerHeight;
   const stripH = (VS.C / N) || 200;
-  // Marge PRÉDICTIVE : on élargit la bande proportionnellement à la vitesse,
-  // pour relancer les vidéos bien avant qu'elles n'entrent à l'écran lors
-  // d'un lancer rapide (momentum) — sinon tuiles figées à la couture.
-  const margin = stripH * ACTIVE_MARGIN_STRIPS + Math.abs(VS.vel) * CULL_LOOKAHEAD;
+  // Marge = au moins UN bloc complet de chaque côté (VS.C), pour que la copie
+  // qui va s'enrouler dans le viewport soit TOUJOURS déjà en lecture (sinon
+  // tuile vide qui « clignote » à l'apparition). On élargit encore selon la
+  // vitesse pour anticiper les lancers rapides (momentum).
+  const margin = Math.max(stripH * ACTIVE_MARGIN_STRIPS, VS.C)
+               + Math.abs(VS.vel) * CULL_LOOKAHEAD;
   document.querySelectorAll('.project-iframe-wrap video').forEach(vid => {
     const r = vid.getBoundingClientRect();
     const inBand = r.bottom > -margin && r.top < vh + margin;
     if (inBand) {
       if (vid.paused) vid.play().catch(() => {});
-    } else if (!vid.paused) {
+    } else if (!vid.paused && _painted.has(vid)) {
+      // On ne met en pause QUE si la vidéo a déjà affiché une image
+      // (elle conservera cette image figée au lieu de montrer le fond).
       vid.pause();
     }
   });
@@ -722,11 +776,15 @@ function bindScrollInput() {
   scrollArea.addEventListener('touchcancel', endTouch, { passive: true });
 
   // Molette / trackpad
+  // Écouté sur WINDOW (pas sur #scroll-area) : Safari ne délivrait pas
+  // l'événement wheel de façon fiable à un conteneur en overflow:hidden, d'où
+  // « le scroll physique ne fait rien » sur macOS. Au niveau window, la
+  // livraison et le preventDefault sont fiables sur tous les navigateurs.
   // On n'applique PAS le delta directement à la position : la molette souris
   // arrive par paliers (~100px) et ferait sauter la page ET le texte MAHÉ.
-  // On l'injecte comme impulsion de vitesse : le moteur lisse le mouvement
-  // image par image (glissement continu, comme un scroll natif animé).
-  scrollArea.addEventListener('wheel', (e) => {
+  // On l'injecte comme impulsion de vitesse : le moteur lisse le mouvement.
+  window.addEventListener('wheel', (e) => {
+    if (pvView.classList.contains('open')) return; // laisse la vue projet tranquille
     e.preventDefault();
     VS.auto = null;
     let d = e.deltaY;
@@ -886,28 +944,22 @@ let firstTourDone = false;
 let lastTs = null;
 
 function animateLight(ts) {
-  // Stop dès que le premier tour est terminé
-  if (firstTourDone) return;
-
   if (!lastTs) lastTs = ts;
   const dt = (ts - lastTs) / 1000;
   lastTs = ts;
 
-  lightOffset += SPEED_FAST * dt;
+  // 1er tour rapide, puis tours suivants lents — EN CONTINU, sans pause.
+  const speed = firstTourDone ? SPEED_SLOW : SPEED_FAST;
+  lightOffset += speed * dt;
 
-  if (lightOffset >= PERIM) {
-    // Premier tour terminé — on fixe à la fin et on arrête
-    lightOffset = PERIM;
-    firstTourDone = true;
-    // Cache la lumière proprement
-    document.querySelectorAll('.name-svg-light').forEach(el => {
-      el.style.opacity = '0';
-    });
-    return;
+  if (!firstTourDone && lightOffset >= PERIM) {
+    firstTourDone = true; // bascule en vitesse lente, sans s'arrêter ni se cacher
   }
 
+  // L'offset reste borné au périmètre (la lumière reboucle indéfiniment)
+  const o = lightOffset % PERIM;
   document.querySelectorAll('.name-svg-light').forEach(el => {
-    el.style.strokeDashoffset = -lightOffset;
+    el.style.strokeDashoffset = -o;
   });
 
   requestAnimationFrame(animateLight);
