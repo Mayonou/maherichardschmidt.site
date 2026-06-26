@@ -263,13 +263,8 @@
       transition: opacity .6s ease;
     }
     #loading.hidden { opacity: 0; pointer-events: none; }
-    /* Pendant le chargement, on fait passer le nom MAHÉ au-dessus de l'overlay
-       (et de sa barre) ; il retrouve son z-index normal une fois chargé. */
-    body.loading #name-wrap { z-index: 9001; }
     .loading-bar {
       width: 120px; height: 1px; background: var(--line); overflow: hidden;
-      /* descend la barre sous le nom MAHÉ (centré verticalement) */
-      transform: translateY(90px);
     }
     .loading-fill {
       height: 100%; background: var(--accent);
@@ -277,7 +272,7 @@
     }
   </style>
 </head>
-<body class="loading">
+<body>
 
 <div id="loading"><div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div></div>
 <div id="cursor"></div>
@@ -521,10 +516,11 @@ function buildStrips() {
   const allVids     = Array.from(projectsInner.querySelectorAll('video'));
   const readySet    = new Set();
 
-  // Masque l'overlay ET redescend le nom MAHÉ à son z-index normal
+  // Masque l'overlay des tuiles puis lance l'animation lumineuse du nom MAHÉ
+  // (elle ne démarre qu'une fois les tuiles apparues).
   const hideLoading = () => {
     loadingEl.classList.add('hidden');
-    document.body.classList.remove('loading');
+    startLight();
   };
 
   function markReady(vid) {
@@ -766,13 +762,15 @@ function bindScrollInput() {
   // seuil, on ne défile pas et on ne fait PAS de preventDefault — sinon le clic
   // synthétique (qui ouvre le projet) est annulé. Le défilement ne démarre qu'au
   // franchissement du seuil. C'était la cause des taps « capricieux » sur mobile.
-  const TAP_SLOP = 10; // px de tolérance avant de considérer que c'est un scroll
-  let startX = 0, startY = 0, lastY = 0, lastT = 0, vy = 0, moving = false;
+  const TAP_SLOP     = 12;  // px avant de DÉMARRER le défilement
+  const TAP_MAX_MOVE = 24;  // px max de déplacement total pour rester un « tap »
+  const TAP_MAX_TIME = 350; // ms max pour un « tap »
+  let startX = 0, startY = 0, startTime = 0, lastY = 0, lastT = 0, vy = 0, moving = false;
 
   scrollArea.addEventListener('touchstart', (e) => {
     const t = e.touches[0];
     startX = t.clientX; startY = lastY = t.clientY;
-    lastT = performance.now(); vy = 0; moving = false;
+    startTime = lastT = performance.now(); vy = 0; moving = false;
     VS.vel = 0; VS.auto = null;
     resetIdle();
   }, { passive: true });
@@ -782,9 +780,8 @@ function bindScrollInput() {
     const y = t.clientY, now = performance.now();
 
     if (!moving) {
-      // Encore potentiellement un tap : on attend de dépasser le seuil
+      // Sous le seuil : on ne défile pas encore (ça pourrait être un tap)
       if (Math.hypot(t.clientX - startX, y - startY) < TAP_SLOP) return;
-      // Seuil franchi → c'est un scroll
       moving = true; VS.dragging = true;
       lastY = y; lastT = now;          // repart d'ici pour éviter un saut
     }
@@ -798,23 +795,26 @@ function bindScrollInput() {
   }, { passive: false });
 
   const endTouch = (e) => {
-    if (moving) {
-      // C'était un scroll → on lance l'inertie
-      VS.vel = Math.max(-MAX_V, Math.min(MAX_V, vy));
-    } else {
-      // C'était un TAP → on ouvre le projet sous le doigt directement.
-      // On ne se fie pas au clic synthétique (peu fiable avec le moteur de
-      // transform sur mobile) ; on le supprime pour éviter une double ouverture.
-      const t = e.changedTouches && e.changedTouches[0];
-      if (t) {
-        const el   = document.elementFromPoint(t.clientX, t.clientY);
-        const proj = el && el.closest ? el.closest('.project') : null;
-        if (proj && proj.dataset.idx != null) {
-          _lastTapOpen = Date.now();
-          if (e.cancelable) e.preventDefault();
-          openProject(parseInt(proj.dataset.idx));
-        }
+    const t    = e.changedTouches && e.changedTouches[0];
+    const dist = t ? Math.hypot(t.clientX - startX, t.clientY - startY) : 999;
+    const dur  = performance.now() - startTime;
+
+    // TAP = geste bref et peu déplacé → on ouvre le projet sous le doigt.
+    // Détection tolérante (durée + distance) plutôt qu'un seuil de mouvement
+    // strict : un pouce « bouge » toujours un peu, d'où les taps ratés avant.
+    // On n'utilise PAS le clic synthétique (peu fiable avec le moteur de
+    // transform) et on le supprime pour éviter une double ouverture.
+    if (t && dist < TAP_MAX_MOVE && dur < TAP_MAX_TIME) {
+      const el   = document.elementFromPoint(t.clientX, t.clientY);
+      const proj = el && el.closest ? el.closest('.project') : null;
+      if (proj && proj.dataset.idx != null) {
+        _lastTapOpen = Date.now();
+        if (e.cancelable) e.preventDefault();
+        openProject(parseInt(proj.dataset.idx));
       }
+    } else if (moving) {
+      // Sinon, si ça a défilé → on lance l'inertie
+      VS.vel = Math.max(-MAX_V, Math.min(MAX_V, vy));
     }
     VS.dragging = false;
     moving = false;
@@ -987,41 +987,47 @@ function updateName() {
 }
 updateName();
 
-// ── Animation lumière — 1 tour rapide puis boucle lente sans pause ──
-// La lumière tourne EN CONTINU.
-// Tour 1 : 800px/s (rapide, ~2.5s)
-// Tour 2+ : 80px/s (lent, ~25s par tour)
-// Périmètre total estimé des lettres MAHÉ
-const PERIM        = 2000;
-const SPEED_FAST   = 800;  // px/s — premier tour
-const SPEED_SLOW   = 80;   // px/s — tous les tours suivants
+// ── Animation lumière — UN SEUL tour rapide, puis stop ──
+// La lumière trace les lettres une fois (~2.5s) puis disparaît. Démarrée par
+// startLight() une fois les tuiles apparues (voir hideLoading).
+const PERIM        = 2000;  // périmètre estimé des lettres MAHÉ
+const SPEED_FAST   = 800;   // px/s — vitesse du tour unique
 
-let lightOffset = 0;       // position actuelle sur le périmètre (0 → PERIM)
+let lightOffset   = 0;
 let firstTourDone = false;
-let lastTs = null;
+let lastTs        = null;
 
 function animateLight(ts) {
+  if (firstTourDone) return;        // un seul tour, pas de boucle lente
+
   if (!lastTs) lastTs = ts;
   const dt = (ts - lastTs) / 1000;
   lastTs = ts;
 
-  // 1er tour rapide, puis tours suivants lents — EN CONTINU, sans pause.
-  const speed = firstTourDone ? SPEED_SLOW : SPEED_FAST;
-  lightOffset += speed * dt;
+  lightOffset += SPEED_FAST * dt;
 
-  if (!firstTourDone && lightOffset >= PERIM) {
-    firstTourDone = true; // bascule en vitesse lente, sans s'arrêter ni se cacher
+  if (lightOffset >= PERIM) {
+    // Tour terminé → on cache la lumière proprement et on arrête
+    firstTourDone = true;
+    document.querySelectorAll('.name-svg-light').forEach(el => { el.style.opacity = '0'; });
+    return;
   }
 
-  // L'offset reste borné au périmètre (la lumière reboucle indéfiniment)
-  const o = lightOffset % PERIM;
   document.querySelectorAll('.name-svg-light').forEach(el => {
-    el.style.strokeDashoffset = -o;
+    el.style.strokeDashoffset = -lightOffset;
   });
 
   requestAnimationFrame(animateLight);
 }
-requestAnimationFrame(animateLight);
+
+// Démarre l'animation lumineuse une seule fois (appelée après l'apparition
+// des tuiles, depuis hideLoading).
+let _lightStarted = false;
+function startLight() {
+  if (_lightStarted) return;
+  _lightStarted = true;
+  requestAnimationFrame(animateLight);
+}
 
 // ══════════════════════════════════════════════
 // ── EFFETS IDLE ──
