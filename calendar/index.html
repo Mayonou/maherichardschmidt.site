@@ -1,7 +1,271 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-<meta http-equiv="refresh" content="0; url=https://docs.google.com/spreadsheets/d/1OSo2QMpd1leO_PhjqH7UIGy1pj49oJM8iYLwaza9r5o/edit?gid=1178727653#gid=1178727653">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Disponibilités — Mahé Richard-Schmidt</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400&family=Outfit:wght@100;200&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a09; --white: #f0ede8; --muted: #55554f;
+      --accent: #c8b89a; --line: #1e1e1c;
+      --dispo: #7a9b6e; --occupe: #c17a4e; --weekend: #8a7ca0; --past: #232320;
+    }
+    body {
+      background: var(--bg); color: var(--white);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+    }
+    :focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+    /* ── Header — identique au site principal ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      border-bottom: 1px solid var(--line);
+    }
+    .hdr-name {
+      font-family: 'Outfit', sans-serif; font-weight: 100;
+      font-size: .75rem; letter-spacing: .2em; text-transform: uppercase; color: var(--accent);
+    }
+    .hdr-role { font-size: .56rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+    .back-link {
+      font-size: .58rem; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); text-decoration: none; transition: color .2s;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .back-link:hover { color: var(--white); }
+    .back-link::before { content: '←'; font-size: .9rem; }
+
+    /* ── Contenu ── */
+    main { max-width: 760px; margin: 0 auto; padding: 88px 32px 72px; }
+    .eyebrow {
+      font-size: .58rem; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 18px;
+    }
+    h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      letter-spacing: .04em; line-height: .95;
+      color: var(--white); margin-bottom: 22px;
+    }
+    .intro {
+      font-size: .8rem; line-height: 1.75; color: var(--muted);
+      max-width: 52ch; margin-bottom: 36px;
+    }
+
+    /* ── Légende ── */
+    .legend { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 40px; }
+    .legend-item {
+      display: flex; align-items: center; gap: 9px;
+      font-size: .56rem; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .swatch { width: 11px; height: 11px; flex-shrink: 0; }
+    .swatch.dispo   { background: var(--dispo); }
+    .swatch.occupe  { background: var(--occupe); }
+    .swatch.weekend { background: var(--weekend); }
+
+    /* ── Navigation mois ── */
+    .cal-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    #cal-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.5rem; letter-spacing: .06em;
+    }
+    .nav-btn {
+      background: none; border: 1px solid var(--line); color: var(--white);
+      width: 34px; height: 34px; cursor: pointer;
+      font-family: 'DM Mono', monospace; font-size: .9rem;
+      transition: border-color .2s ease, color .2s ease;
+    }
+    .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .nav-btn:disabled { opacity: .25; cursor: default; }
+    .nav-btn:disabled:hover { border-color: var(--line); color: var(--white); }
+
+    /* ── Grille calendrier ── */
+    .weekdays {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+    }
+    .weekdays div {
+      padding: 10px 0; text-align: center;
+      font-size: .56rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--muted);
+      border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    }
+    .grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      border-left: 1px solid var(--line);
+    }
+    .day {
+      aspect-ratio: 1 / 0.85; min-height: 56px;
+      border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+      padding: 8px; position: relative;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .day .num { font-size: .68rem; color: var(--white); }
+    .day .status {
+      font-size: .48rem; letter-spacing: .08em; text-transform: uppercase;
+    }
+    .day.dispo   { background: rgba(122,155,110,.14); }
+    .day.dispo   .status { color: var(--dispo); }
+    .day.occupe  { background: rgba(193,122,78,.14); }
+    .day.occupe  .status { color: var(--occupe); }
+    .day.weekend { background: rgba(138,124,160,.12); }
+    .day.weekend .status { color: var(--weekend); }
+    .day.past, .day.empty { background: var(--past); }
+    .day.past .num { color: var(--muted); }
+    .day.empty { border-right-color: var(--line); }
+
+    /* ── CTA ── */
+    .cta {
+      display: inline-flex; align-items: center; gap: 16px;
+      margin-top: 40px; padding: 18px 30px;
+      border: 1px solid var(--line); background: transparent;
+      color: var(--white); text-decoration: none;
+      font-family: 'DM Mono', monospace;
+      font-size: .64rem; letter-spacing: .16em; text-transform: uppercase;
+      transition: border-color .25s ease, background .25s ease;
+    }
+    .cta:hover { border-color: var(--accent); background: rgba(200,184,154,.06); }
+    .cta::after { content: '→'; font-size: 1rem; transition: transform .25s ease; }
+    .cta:hover::after { transform: translateX(4px); }
+
+    @media (max-width: 560px) {
+      header { padding: 0 24px; }
+      main { padding: 64px 20px 48px; }
+      .day { min-height: 44px; padding: 6px; }
+      .day .num { font-size: .6rem; }
+      .day .status { font-size: .4rem; }
+      .weekdays div { font-size: .48rem; padding: 6px 0; }
+    }
+  </style>
 </head>
-<body></body>
+<body>
+
+<header>
+  <div>
+    <div class="hdr-name">Mahé Richard-Schmidt</div>
+    <div class="hdr-role">Monteur vidéo</div>
+  </div>
+  <a href="/" class="back-link">Retour au site</a>
+</header>
+
+<main>
+  <div class="eyebrow">Réservation</div>
+  <h1>Disponibilités</h1>
+  <p class="intro">
+    Vert : je suis libre. Orange : déjà réservé. Violet : week-end. Vérifiez une date
+    avant de me contacter pour un tournage ou un montage.
+  </p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch dispo"></span>Disponible</div>
+    <div class="legend-item"><span class="swatch occupe"></span>Occupé</div>
+    <div class="legend-item"><span class="swatch weekend"></span>Week-end</div>
+  </div>
+
+  <div class="cal-nav">
+    <button class="nav-btn" id="prev" aria-label="Mois précédent">←</button>
+    <div id="cal-title"></div>
+    <button class="nav-btn" id="next" aria-label="Mois suivant">→</button>
+  </div>
+
+  <div class="weekdays">
+    <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <a class="cta" href="mailto:maherichardschmidt@gmail.com">Me contacter</a>
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  JOURS OCCUPÉS — modifie uniquement ce tableau
+//  Format : 'AAAA-MM-JJ'. Tout le reste (dispo / week-end) est
+//  calculé automatiquement.
+// ═══════════════════════════════════════════════════════════════
+const OCCUPE = [
+  '2026-10-01','2026-10-02','2026-10-03','2026-10-04',
+  '2026-10-10','2026-10-11',
+  '2026-10-12','2026-10-13','2026-10-14','2026-10-15','2026-10-16',
+];
+// ═══════════════════════════════════════════════════════════════
+
+const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+const today = new Date();
+today.setHours(0,0,0,0);
+
+let viewYear  = today.getFullYear();
+let viewMonth = today.getMonth();
+
+const gridEl  = document.getElementById('grid');
+const titleEl = document.getElementById('cal-title');
+const prevBtn = document.getElementById('prev');
+const nextBtn = document.getElementById('next');
+
+function toISO(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function render() {
+  titleEl.textContent = `${MOIS[viewMonth]} ${viewYear}`;
+  gridEl.innerHTML = '';
+
+  const firstOfMonth = new Date(viewYear, viewMonth, 1);
+  const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+  // Lundi = 0 ... Dimanche = 6
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
+
+  for (let i = 0; i < leadingBlanks; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'day empty';
+    gridEl.appendChild(cell);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date    = new Date(viewYear, viewMonth, d);
+    const iso     = toISO(viewYear, viewMonth, d);
+    const isPast  = date < today;
+    const isWknd  = date.getDay() === 0 || date.getDay() === 6;
+    const isBooked = OCCUPE.includes(iso);
+
+    const cell = document.createElement('div');
+    let status = '';
+    if (isPast) {
+      cell.className = 'day past';
+    } else if (isBooked) {
+      cell.className = 'day occupe'; status = 'Occupé';
+    } else if (isWknd) {
+      cell.className = 'day weekend'; status = 'Week-end';
+    } else {
+      cell.className = 'day dispo'; status = 'Dispo';
+    }
+
+    cell.innerHTML = `<div class="num">${d}</div><div class="status">${status}</div>`;
+    gridEl.appendChild(cell);
+  }
+
+  prevBtn.disabled = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+}
+
+prevBtn.addEventListener('click', () => {
+  viewMonth--;
+  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  render();
+});
+nextBtn.addEventListener('click', () => {
+  viewMonth++;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  render();
+});
+
+render();
+</script>
+</body>
 </html>
