@@ -10,7 +10,9 @@
     :root {
       --bg: #0a0a09; --white: #f0ede8; --muted: #55554f;
       --accent: #c8b89a; --line: #1e1e1c;
-      --dispo: #7a9b6e; --occupe: #c17a4e; --weekend: #8a7ca0; --past: #232320;
+      --dispo: #7a9b6e; --occupe: #c17a4e; --weekend: #8a7ca0; --past: #2b2b28; --empty: var(--bg);
+      /* fonds plus saturés, réservés aux cases de la vue mensuelle */
+      --dispo-wash: rgba(111,175,82,.32); --occupe-wash: rgba(210,108,58,.30); --weekend-wash: rgba(134,98,178,.30);
     }
     body {
       background: var(--bg); color: var(--white);
@@ -125,15 +127,15 @@
     .day .status {
       font-size: .48rem; letter-spacing: .08em; text-transform: uppercase;
     }
-    .day.dispo   { background: rgba(122,155,110,.14); }
+    .day.dispo   { background: var(--dispo-wash); }
     .day.dispo   .status { color: var(--dispo); }
-    .day.occupe  { background: rgba(193,122,78,.14); }
+    .day.occupe  { background: var(--occupe-wash); }
     .day.occupe  .status { color: var(--occupe); }
-    .day.weekend { background: rgba(138,124,160,.12); }
+    .day.weekend { background: var(--weekend-wash); }
     .day.weekend .status { color: var(--weekend); }
-    .day.past, .day.empty { background: var(--past); }
+    .day.past    { background: var(--past); }
     .day.past .num { color: var(--muted); }
-    .day.empty { border-right-color: var(--line); }
+    .day.empty   { background: var(--empty); border-right-color: var(--line); }
 
     /* ── Vue annuelle ── */
     .year-grid {
@@ -291,7 +293,8 @@ function buildMonthDays(year, month) {
 
     days.push({ day: d, iso, cls, status });
   }
-  return { leadingBlanks, days };
+  const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
+  return { leadingBlanks, trailingBlanks, days };
 }
 
 function renderMonthView() {
@@ -302,7 +305,7 @@ function renderMonthView() {
   titleEl.textContent = `${MOIS[viewMonth]} ${viewYear}`;
   gridEl.innerHTML = '';
 
-  const { leadingBlanks, days } = buildMonthDays(viewYear, viewMonth);
+  const { leadingBlanks, trailingBlanks, days } = buildMonthDays(viewYear, viewMonth);
 
   for (let i = 0; i < leadingBlanks; i++) {
     const cell = document.createElement('div');
@@ -315,6 +318,11 @@ function renderMonthView() {
     cell.innerHTML = `<div class="num">${day}</div><div class="status">${status}</div>`;
     gridEl.appendChild(cell);
   });
+  for (let i = 0; i < trailingBlanks; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'day empty';
+    gridEl.appendChild(cell);
+  }
 
   prevBtn.disabled = viewYear === today.getFullYear() && viewMonth === today.getMonth();
 }
