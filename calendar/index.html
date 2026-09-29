@@ -16,10 +16,24 @@
     }
     body {
       background: var(--bg); color: var(--white);
-      font-family: 'DM Mono', monospace;
+      font-family: 'DM Mono', monospace; cursor: none;
       min-height: 100vh;
     }
     :focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+    /* ── Curseur — identique au site principal ── */
+    #cursor {
+      position: fixed; z-index: 9999; pointer-events: none;
+      mix-blend-mode: difference; left: -80px; top: -80px;
+      transform: translate(-50%, -50%); width: 36px; height: 36px;
+    }
+    #cursor::before, #cursor::after {
+      content: ""; position: absolute; top: 50%; left: 50%;
+      width: 32px; height: 2px; background: rgba(255,255,255,0.95);
+      transform-origin: center;
+    }
+    #cursor::before { transform: translate(-50%, -50%) rotate(45deg); }
+    #cursor::after  { transform: translate(-50%, -50%) rotate(-45deg); }
 
     /* ── Header — identique au site principal ── */
     header {
@@ -35,7 +49,7 @@
     .back-link {
       font-size: .58rem; letter-spacing: .14em; text-transform: uppercase;
       color: var(--muted); text-decoration: none; transition: color .2s;
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; cursor: none;
     }
     .back-link:hover { color: var(--white); }
     .back-link::before { content: '←'; font-size: .9rem; }
@@ -75,7 +89,7 @@
     .view-toggle { display: flex; gap: 8px; }
     .view-btn {
       background: none; border: 1px solid var(--line); color: var(--muted);
-      padding: 9px 18px; cursor: pointer;
+      padding: 9px 18px; cursor: none;
       font-family: 'DM Mono', monospace; font-size: .58rem;
       letter-spacing: .12em; text-transform: uppercase;
       transition: color .2s ease, border-color .2s ease;
@@ -94,7 +108,7 @@
     }
     .nav-btn {
       background: none; border: 1px solid var(--line); color: var(--white);
-      width: 34px; height: 34px; cursor: pointer;
+      width: 34px; height: 34px; cursor: none;
       font-family: 'DM Mono', monospace; font-size: .9rem;
       transition: border-color .2s ease, color .2s ease;
     }
@@ -167,7 +181,7 @@
       display: inline-flex; align-items: center; gap: 16px;
       margin-top: 40px; padding: 18px 30px;
       border: 1px solid var(--line); background: transparent;
-      color: var(--white); text-decoration: none;
+      color: var(--white); text-decoration: none; cursor: none;
       font-family: 'DM Mono', monospace;
       font-size: .64rem; letter-spacing: .16em; text-transform: uppercase;
       transition: border-color .25s ease, background .25s ease;
@@ -187,6 +201,8 @@
   </style>
 </head>
 <body>
+
+<div id="cursor"></div>
 
 <header>
   <div>
@@ -230,19 +246,25 @@
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  JOURS OCCUPÉS — modifie uniquement ce tableau
-//  Format : 'AAAA-MM-JJ'. Tout le reste (dispo / week-end) est
-//  calculé automatiquement.
+//  Format : 'AAMMJJ' (2 chiffres année, 2 mois, 2 jour).
+//  Ex : '261010' = 10 octobre 2026. Tout le reste (dispo / week-end)
+//  est calculé automatiquement.
 // ═══════════════════════════════════════════════════════════════
 const OCCUPE = [
-  '2026-10-01','2026-10-02','2026-10-03','2026-10-04',
-  '2026-10-10','2026-10-11',
-  '2026-10-12','2026-10-13','2026-10-14','2026-10-15','2026-10-16',
-  '2026-11-22','2026-11-23','2026-11-24','2026-11-25','2026-11-26','2026-11-27','2026-11-28','2026-11-29','2026-11-30','2026-12-01','2026-12-02','2026-12-03',
-  '2026-12-04','2026-12-05',
+  '261001','261002','261003','261004',
+  '261010','261011',
+  '261012','261013','261014','261015','261016',
 ];
 // ═══════════════════════════════════════════════════════════════
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+// ── Curseur ──
+const cursor = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top  = e.clientY + 'px';
+});
 
 const today = new Date();
 today.setHours(0,0,0,0);
@@ -269,8 +291,11 @@ const nextBtn     = document.getElementById('next');
 const viewMonthBtn = document.getElementById('view-month');
 const viewYearBtn  = document.getElementById('view-year');
 
-function toISO(y, m, d) {
-  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+function toKey(y, m, d) {
+  return `${String(y).slice(-2)}${String(m + 1).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+}
+function toLabel(y, m, d) {
+  return `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
 }
 
 // Calcule le statut de chaque jour d'un mois donné — utilisé par les deux vues
@@ -282,10 +307,10 @@ function buildMonthDays(year, month) {
   const days = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const date  = new Date(year, month, d);
-    const iso   = toISO(year, month, d);
+    const key   = toKey(year, month, d);
     const isPast   = date < today;
     const isWknd   = date.getDay() === 0 || date.getDay() === 6;
-    const isBooked = OCCUPE.includes(iso);
+    const isBooked = OCCUPE.includes(key);
 
     let status, cls;
     if (isPast)        { cls = 'past';    status = ''; }
@@ -293,7 +318,7 @@ function buildMonthDays(year, month) {
     else if (isWknd)   { cls = 'weekend'; status = 'Week-end'; }
     else                { cls = 'dispo';   status = 'Dispo'; }
 
-    days.push({ day: d, iso, cls, status });
+    days.push({ day: d, key, label: toLabel(year, month, d), cls, status });
   }
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
   return { leadingBlanks, trailingBlanks, days };
@@ -354,10 +379,10 @@ function renderYearView() {
       cell.className = 'mini-day empty';
       miniGrid.appendChild(cell);
     }
-    days.forEach(({ iso, cls, status }) => {
+    days.forEach(({ label, cls, status }) => {
       const cell = document.createElement('div');
       cell.className = `mini-day ${cls}`;
-      cell.title = status ? `${iso} — ${status}` : iso;
+      cell.title = status ? `${label} — ${status}` : label;
       miniGrid.appendChild(cell);
     });
 
