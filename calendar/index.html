@@ -50,13 +50,14 @@
       letter-spacing: .04em; line-height: .95;
       color: var(--white); margin-bottom: 22px;
     }
-    .intro {
-      font-size: .8rem; line-height: 1.75; color: var(--muted);
-      max-width: 52ch; margin-bottom: 36px;
-    }
+    .intro { display: none; }
 
-    /* ── Légende ── */
-    .legend { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 40px; }
+    /* ── Légende + toggle sur une ligne ── */
+    .legend-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px; margin-bottom: 28px;
+    }
+    .legend { display: flex; gap: 22px; flex-wrap: wrap; }
     .legend-item {
       display: flex; align-items: center; gap: 9px;
       font-size: .56rem; letter-spacing: .1em; text-transform: uppercase;
@@ -66,6 +67,19 @@
     .swatch.dispo   { background: var(--dispo); }
     .swatch.occupe  { background: var(--occupe); }
     .swatch.weekend { background: var(--weekend); }
+    .swatch.past    { background: var(--past); border: 1px solid var(--line); }
+
+    /* ── Toggle mois / année ── */
+    .view-toggle { display: flex; gap: 8px; }
+    .view-btn {
+      background: none; border: 1px solid var(--line); color: var(--muted);
+      padding: 9px 18px; cursor: pointer;
+      font-family: 'DM Mono', monospace; font-size: .58rem;
+      letter-spacing: .12em; text-transform: uppercase;
+      transition: color .2s ease, border-color .2s ease;
+    }
+    .view-btn:hover { color: var(--white); }
+    .view-btn.active { color: var(--white); border-color: var(--accent); }
 
     /* ── Navigation mois ── */
     .cal-nav {
@@ -121,6 +135,31 @@
     .day.past .num { color: var(--muted); }
     .day.empty { border-right-color: var(--line); }
 
+    /* ── Vue annuelle ── */
+    .year-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 32px 22px;
+    }
+    .mini-month h3 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: .8rem; letter-spacing: .06em;
+      margin-bottom: 8px; color: var(--white);
+    }
+    .mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .mini-day { aspect-ratio: 1 / 1; }
+    .mini-day.dispo   { background: var(--dispo); }
+    .mini-day.occupe  { background: var(--occupe); }
+    .mini-day.weekend { background: var(--weekend); }
+    .mini-day.past    { background: var(--past); }
+    .mini-day.empty   { background: transparent; }
+
+    @media (max-width: 620px) {
+      .year-grid { grid-template-columns: repeat(2, 1fr); gap: 26px 16px; }
+    }
+    @media (max-width: 400px) {
+      .year-grid { grid-template-columns: 1fr; }
+    }
+
     /* ── CTA ── */
     .cta {
       display: inline-flex; align-items: center; gap: 16px;
@@ -158,27 +197,30 @@
 <main>
   <div class="eyebrow">Réservation</div>
   <h1>Disponibilités</h1>
-  <p class="intro">
-    Vert : je suis libre. Orange : déjà réservé. Violet : week-end. Vérifiez une date
-    avant de me contacter pour un tournage ou un montage.
-  </p>
-
-  <div class="legend">
-    <div class="legend-item"><span class="swatch dispo"></span>Disponible</div>
-    <div class="legend-item"><span class="swatch occupe"></span>Occupé</div>
-    <div class="legend-item"><span class="swatch weekend"></span>Week-end</div>
+  <div class="legend-row">
+    <div class="legend">
+      <div class="legend-item"><span class="swatch dispo"></span>Disponible</div>
+      <div class="legend-item"><span class="swatch occupe"></span>Occupé</div>
+      <div class="legend-item"><span class="swatch weekend"></span>Week-end</div>
+      <div class="legend-item"><span class="swatch past"></span>Passé</div>
+    </div>
+    <div class="view-toggle">
+      <button class="view-btn active" id="view-month">Mois</button>
+      <button class="view-btn" id="view-year">Année</button>
+    </div>
   </div>
 
   <div class="cal-nav">
-    <button class="nav-btn" id="prev" aria-label="Mois précédent">←</button>
+    <button class="nav-btn" id="prev" aria-label="Précédent">←</button>
     <div id="cal-title"></div>
-    <button class="nav-btn" id="next" aria-label="Mois suivant">→</button>
+    <button class="nav-btn" id="next" aria-label="Suivant">→</button>
   </div>
 
-  <div class="weekdays">
+  <div class="weekdays" id="weekdays-row">
     <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
   </div>
   <div class="grid" id="grid"></div>
+  <div class="year-grid" id="year-grid" style="display:none;"></div>
 
   <a class="cta" href="mailto:maherichardschmidt@gmail.com">Me contacter</a>
 </main>
@@ -201,67 +243,155 @@ const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août'
 const today = new Date();
 today.setHours(0,0,0,0);
 
+let view      = 'month'; // 'month' | 'year'
 let viewYear  = today.getFullYear();
 let viewMonth = today.getMonth();
 
-const gridEl  = document.getElementById('grid');
-const titleEl = document.getElementById('cal-title');
-const prevBtn = document.getElementById('prev');
-const nextBtn = document.getElementById('next');
+// Fenêtre glissante de 12 mois pour la vue "Année" — démarre toujours au mois
+// actuel (ex : septembre 2026 → août 2027), jamais de mois passés inutiles.
+let yearStart = { year: today.getFullYear(), month: today.getMonth() };
+
+function addMonths({ year, month }, delta) {
+  const total = month + delta;
+  return { year: year + Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
+}
+
+const gridEl      = document.getElementById('grid');
+const yearGridEl  = document.getElementById('year-grid');
+const weekdaysRow = document.getElementById('weekdays-row');
+const titleEl     = document.getElementById('cal-title');
+const prevBtn     = document.getElementById('prev');
+const nextBtn     = document.getElementById('next');
+const viewMonthBtn = document.getElementById('view-month');
+const viewYearBtn  = document.getElementById('view-year');
 
 function toISO(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-function render() {
+// Calcule le statut de chaque jour d'un mois donné — utilisé par les deux vues
+function buildMonthDays(year, month) {
+  const firstOfMonth  = new Date(year, month, 1);
+  const daysInMonth   = new Date(year, month + 1, 0).getDate();
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7; // Lundi = 0
+
+  const days = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date  = new Date(year, month, d);
+    const iso   = toISO(year, month, d);
+    const isPast   = date < today;
+    const isWknd   = date.getDay() === 0 || date.getDay() === 6;
+    const isBooked = OCCUPE.includes(iso);
+
+    let status, cls;
+    if (isPast)        { cls = 'past';    status = ''; }
+    else if (isBooked) { cls = 'occupe';  status = 'Occupé'; }
+    else if (isWknd)   { cls = 'weekend'; status = 'Week-end'; }
+    else                { cls = 'dispo';   status = 'Dispo'; }
+
+    days.push({ day: d, iso, cls, status });
+  }
+  return { leadingBlanks, days };
+}
+
+function renderMonthView() {
+  weekdaysRow.style.display = '';
+  gridEl.style.display = '';
+  yearGridEl.style.display = 'none';
+
   titleEl.textContent = `${MOIS[viewMonth]} ${viewYear}`;
   gridEl.innerHTML = '';
 
-  const firstOfMonth = new Date(viewYear, viewMonth, 1);
-  const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
-  // Lundi = 0 ... Dimanche = 6
-  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
+  const { leadingBlanks, days } = buildMonthDays(viewYear, viewMonth);
 
   for (let i = 0; i < leadingBlanks; i++) {
     const cell = document.createElement('div');
     cell.className = 'day empty';
     gridEl.appendChild(cell);
   }
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date    = new Date(viewYear, viewMonth, d);
-    const iso     = toISO(viewYear, viewMonth, d);
-    const isPast  = date < today;
-    const isWknd  = date.getDay() === 0 || date.getDay() === 6;
-    const isBooked = OCCUPE.includes(iso);
-
+  days.forEach(({ day, cls, status }) => {
     const cell = document.createElement('div');
-    let status = '';
-    if (isPast) {
-      cell.className = 'day past';
-    } else if (isBooked) {
-      cell.className = 'day occupe'; status = 'Occupé';
-    } else if (isWknd) {
-      cell.className = 'day weekend'; status = 'Week-end';
-    } else {
-      cell.className = 'day dispo'; status = 'Dispo';
-    }
-
-    cell.innerHTML = `<div class="num">${d}</div><div class="status">${status}</div>`;
+    cell.className = `day ${cls}`;
+    cell.innerHTML = `<div class="num">${day}</div><div class="status">${status}</div>`;
     gridEl.appendChild(cell);
-  }
+  });
 
   prevBtn.disabled = viewYear === today.getFullYear() && viewMonth === today.getMonth();
 }
 
+function renderYearView() {
+  weekdaysRow.style.display = 'none';
+  gridEl.style.display = 'none';
+  yearGridEl.style.display = 'grid';
+
+  const last = addMonths(yearStart, 11);
+  titleEl.textContent = `${MOIS[yearStart.month]} ${yearStart.year} – ${MOIS[last.month]} ${last.year}`;
+  yearGridEl.innerHTML = '';
+
+  for (let i = 0; i < 12; i++) {
+    const { year, month } = addMonths(yearStart, i);
+    const { leadingBlanks, days } = buildMonthDays(year, month);
+
+    const monthEl = document.createElement('div');
+    monthEl.className = 'mini-month';
+    monthEl.innerHTML = `<h3>${MOIS[month]} ${year}</h3>`;
+
+    const miniGrid = document.createElement('div');
+    miniGrid.className = 'mini-grid';
+
+    for (let b = 0; b < leadingBlanks; b++) {
+      const cell = document.createElement('div');
+      cell.className = 'mini-day empty';
+      miniGrid.appendChild(cell);
+    }
+    days.forEach(({ iso, cls, status }) => {
+      const cell = document.createElement('div');
+      cell.className = `mini-day ${cls}`;
+      cell.title = status ? `${iso} — ${status}` : iso;
+      miniGrid.appendChild(cell);
+    });
+
+    monthEl.appendChild(miniGrid);
+    yearGridEl.appendChild(monthEl);
+  }
+
+  prevBtn.disabled = yearStart.year === today.getFullYear() && yearStart.month === today.getMonth();
+}
+
+function render() {
+  if (view === 'month') renderMonthView();
+  else renderYearView();
+}
+
 prevBtn.addEventListener('click', () => {
-  viewMonth--;
-  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  if (view === 'month') {
+    viewMonth--;
+    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  } else {
+    yearStart = addMonths(yearStart, -12);
+  }
   render();
 });
 nextBtn.addEventListener('click', () => {
-  viewMonth++;
-  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  if (view === 'month') {
+    viewMonth++;
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  } else {
+    yearStart = addMonths(yearStart, 12);
+  }
+  render();
+});
+
+viewMonthBtn.addEventListener('click', () => {
+  view = 'month';
+  viewMonthBtn.classList.add('active');
+  viewYearBtn.classList.remove('active');
+  render();
+});
+viewYearBtn.addEventListener('click', () => {
+  view = 'year';
+  viewYearBtn.classList.add('active');
+  viewMonthBtn.classList.remove('active');
   render();
 });
 
