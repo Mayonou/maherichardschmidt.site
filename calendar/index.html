@@ -176,6 +176,17 @@
       .year-grid { grid-template-columns: 1fr; }
     }
 
+    /* ── Infobulle personnalisée (vue annuelle) ── */
+    .day-tooltip {
+      position: fixed; z-index: 10000; pointer-events: none;
+      background: #100f0d; color: var(--white); border: 1px solid var(--line);
+      font-family: 'DM Mono', monospace; font-size: .62rem; letter-spacing: .04em;
+      padding: 7px 12px; white-space: nowrap;
+      opacity: 0; transform: translate(-50%, -130%);
+      transition: opacity .06s ease;
+    }
+    .day-tooltip.visible { opacity: 1; }
+
     /* ── CTA ── */
     .cta {
       display: inline-flex; align-items: center; gap: 16px;
@@ -254,9 +265,6 @@ const OCCUPE = [
   '261001','261002','261003','261004',
   '261010','261011',
   '261012','261013','261014','261015','261016',
-  '261122','261123','261124','261125','261126','261127',
-  '261128','261129','261130','261201','261202','261203',
-  '261204','261205',
 ];
 // ═══════════════════════════════════════════════════════════════
 
@@ -268,6 +276,25 @@ document.addEventListener('mousemove', e => {
   cursor.style.left = e.clientX + 'px';
   cursor.style.top  = e.clientY + 'px';
 });
+
+// ── Infobulle (vue annuelle) — instantanée, suit la souris, tap sur mobile ──
+const tooltip = document.createElement('div');
+tooltip.className = 'day-tooltip';
+document.body.appendChild(tooltip);
+
+function showTooltip(x, y, text) {
+  tooltip.textContent = text;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top  = y + 'px';
+  tooltip.classList.add('visible');
+}
+function moveTooltip(x, y) {
+  tooltip.style.left = x + 'px';
+  tooltip.style.top  = y + 'px';
+}
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
 
 const today = new Date();
 today.setHours(0,0,0,0);
@@ -328,6 +355,7 @@ function buildMonthDays(year, month) {
 }
 
 function renderMonthView() {
+  hideTooltip();
   weekdaysRow.style.display = '';
   gridEl.style.display = '';
   yearGridEl.style.display = 'none';
@@ -358,6 +386,7 @@ function renderMonthView() {
 }
 
 function renderYearView() {
+  hideTooltip();
   weekdaysRow.style.display = 'none';
   gridEl.style.display = 'none';
   yearGridEl.style.display = 'grid';
@@ -385,7 +414,15 @@ function renderYearView() {
     days.forEach(({ label, cls, status }) => {
       const cell = document.createElement('div');
       cell.className = `mini-day ${cls}`;
-      cell.title = status ? `${label} — ${status}` : label;
+      const text = status ? `${label} — ${status}` : label;
+      cell.addEventListener('mouseenter', e => showTooltip(e.clientX, e.clientY, text));
+      cell.addEventListener('mousemove',  e => moveTooltip(e.clientX, e.clientY));
+      cell.addEventListener('mouseleave', hideTooltip);
+      cell.addEventListener('click', e => {
+        showTooltip(e.clientX, e.clientY, text);
+        clearTimeout(cell._tt);
+        cell._tt = setTimeout(hideTooltip, 2000);
+      });
       miniGrid.appendChild(cell);
     });
 
